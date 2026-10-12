@@ -1,0 +1,105 @@
+New Opportunities — Thursday, September 24
+Hi Priya, here's what's new since Wed Sep 23, 03:31 PM.
+
+New reqs: 3 | Applicants: 3 | Hot replies: 1 | Follow-ups: 7 | Docs past SLA: 1
+1-2. NEW REQUIREMENTS & TOP MATCHES
+* Senior Java Microservices Engineer [High] — Northwind Financial · Charlotte, NC · W-2 · $65–72/hr
+  Skills: Java, Spring Boot, Microservices, Kafka, AWS
+  - Isabel Moreno (86% match) · last contact Sep 23
+    Call: http://localhost:5173/candidates/58?action=call
+    Draft email: http://localhost:5173/candidates/58?action=draft&requirement=1
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NTgsImV4cCI6MTc5MDg4MzA4NiwiciI6MSwidSI6Mn0.krCcfGddzrHi8WDSx9HpddSR5o0pocUUh0NJxxWxCfU
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjU4LCJleHAiOjE3OTA4ODMwODYsInIiOjEsInUiOjJ9.lJfiFq1F3ofKEO-jezRhpnMg6CYANvgbJSBckzhEl2I
+  - Kenji Boateng (77% match) · last contact Never
+    Call: http://localhost:5173/candidates/10?action=call
+    Draft email: http://localhost:5173/candidates/10?action=draft&requirement=1
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6MTAsImV4cCI6MTc5MDg4MzA4NiwiciI6MSwidSI6Mn0.Z4PQlX-V20AJfUpCr2eKR7MBK5wEhztoSm-u-RJbFwM
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjEwLCJleHAiOjE3OTA4ODMwODYsInIiOjEsInUiOjJ9.dn2lrIF-XrNC1KongyuZHoH8PRgd1u61AUyAX-we4ac
+  - Chloe Sato (53% match) · last contact Sep 10
+    Call: http://localhost:5173/candidates/64?action=call
+    Draft email: http://localhost:5173/candidates/64?action=draft&requirement=1
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NjQsImV4cCI6MTc5MDg4MzA4NiwiciI6MSwidSI6Mn0.5vhWKbhuq7XPiw50Rmudz8EJEoRaICRgIkxF-8BV7gk
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjY0LCJleHAiOjE3OTA4ODMwODYsInIiOjEsInUiOjJ9.3rxhEgbAmavldONvJTlXu0PFlpHsTNp8c3Wm0ZrLz_g
+  - Aarav Chen (48% match) · last contact Sep 18
+    Call: http://localhost:5173/candidates/43?action=call
+    Draft email: http://localhost:5173/candidates/43?action=draft&requirement=1
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NDMsImV4cCI6MTc5MDg4MzA4NiwiciI6MSwidSI6Mn0.stoc6IqtkWepxTdM7Yvw8aOTnG4NUf2_vYr8BV5_ihE
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjQzLCJleHAiOjE3OTA4ODMwODYsInIiOjEsInUiOjJ9.CGVUIk6weRJGmqIBccla9hPUpHHzK4Z88O4Q29XU-6I
+  - Fatima Okafor (46% match) · last contact Never
+    Call: http://localhost:5173/candidates/5?action=call
+    Draft email: http://localhost:5173/candidates/5?action=draft&requirement=1
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NSwiZXhwIjoxNzkwODgzMDg2LCJyIjoxLCJ1IjoyfQ.OHucfp5JGsTbqtoo4OI5iPBrekM03nTqLjpI08eSe2I
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjUsImV4cCI6MTc5MDg4MzA4NiwiciI6MSwidSI6Mn0.xfw-TcUrAg_NApaip_qtL35k39ECs1Bed9eF75Wy-oo
+* Data Engineer (Snowflake / Airflow) [High] — Tailspin Logistics · Remote · Either · $60–68/hr
+  Skills: Python, SQL, Airflow, Snowflake, dbt
+  - Diego Tanaka (79% match) · last contact Sep 09
+    Call: http://localhost:5173/candidates/67?action=call
+    Draft email: http://localhost:5173/candidates/67?action=draft&requirement=2
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NjcsImV4cCI6MTc5MDg4MzA4NiwiciI6MiwidSI6Mn0._rL8vQCg7NievfI7HW3r7M6J6pRaGah-JLefpZuCkrs
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjY3LCJleHAiOjE3OTA4ODMwODYsInIiOjIsInUiOjJ9.Vq8O5KTcsHPSk5ZyiLIqXn_TDTv8aYCpJ6LtFozGANM
+  - Leah Chen (67% match) · last contact Never
+    Call: http://localhost:5173/candidates/13?action=call
+    Draft email: http://localhost:5173/candidates/13?action=draft&requirement=2
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6MTMsImV4cCI6MTc5MDg4MzA4NiwiciI6MiwidSI6Mn0.Sx6W--qhorRMsPnS9DKWbGASVRvy8ktHnjjevblxfTg
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjEzLCJleHAiOjE3OTA4ODMwODYsInIiOjIsInUiOjJ9.pnaLRoRHRmB4wNRPu6bPW2ZE_ufjDybtCuhtphF8j2E
+  - Liam Brown (60% match) · last contact Sep 19
+    Call: http://localhost:5173/candidates/25?action=call
+    Draft email: http://localhost:5173/candidates/25?action=draft&requirement=2
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6MjUsImV4cCI6MTc5MDg4MzA4NiwiciI6MiwidSI6Mn0.KduYW5_HbIyzE_dEHum-uXxcdPtBzRADbtqi-CSUXZY
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjI1LCJleHAiOjE3OTA4ODMwODYsInIiOjIsInUiOjJ9.remLNU0WDMrfWyMMxaQeWmIt7sKPgIG4BpbasT-19rY
+  - Rohan Haddad (60% match) · last contact Sep 15
+    Call: http://localhost:5173/candidates/28?action=call
+    Draft email: http://localhost:5173/candidates/28?action=draft&requirement=2
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6MjgsImV4cCI6MTc5MDg4MzA4NiwiciI6MiwidSI6Mn0.glgJWmayJhNhWryKjN6jqyaMcgI0SQeVLfYhCrCu2VA
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjI4LCJleHAiOjE3OTA4ODMwODYsInIiOjIsInUiOjJ9.8HmI86_WPPBs6jmHipdaIb96pibN2qttUOyLwl_Kjjc
+  - Grace Ahmed (60% match) · last contact Sep 08
+    Call: http://localhost:5173/candidates/40?action=call
+    Draft email: http://localhost:5173/candidates/40?action=draft&requirement=2
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NDAsImV4cCI6MTc5MDg4MzA4NiwiciI6MiwidSI6Mn0.y3Lhzpj7RaoVBIpPNuIsLywbaxxUqDlhvueQzXnAcEE
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjQwLCJleHAiOjE3OTA4ODMwODYsInIiOjIsInUiOjJ9.sMPt4SXF2ezIO26jHjZ0LPiVYnO0-vPoRvL4psTAHns
+* React / TypeScript Frontend Developer [Medium] — Fabrikam Retail · Dallas, TX · C2C · $55–62/hr
+  Skills: React, TypeScript, JavaScript, GraphQL
+  - Ananya Silva (92% match) · last contact Never
+    Call: http://localhost:5173/candidates/19?action=call
+    Draft email: http://localhost:5173/candidates/19?action=draft&requirement=3
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6MTksImV4cCI6MTc5MDg4MzA4NiwiciI6MywidSI6Mn0.omr_11Srn-yKr3X8yVcbUhYG4Z1y1hlhArb-6Obi3Pc
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjE5LCJleHAiOjE3OTA4ODMwODYsInIiOjMsInUiOjJ9.6LX2X4i6MzsmasZy9yek2ioqDkG2RFRELd9j1JlXPHU
+  - Leah Osei (89% match) · last contact Sep 21
+    Call: http://localhost:5173/candidates/31?action=call
+    Draft email: http://localhost:5173/candidates/31?action=draft&requirement=3
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6MzEsImV4cCI6MTc5MDg4MzA4NiwiciI6MywidSI6Mn0.D2t_2apzileAJB_DvKpVBCaD5gsGFa3p7S9ZXklj5VM
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjMxLCJleHAiOjE3OTA4ODMwODYsInIiOjMsInUiOjJ9._rDeuOcN5Zkf7WK0I8dyueleZaRCKnzEXqLD4BrCZc0
+  - Mateo Ahmed (86% match) · last contact Never
+    Call: http://localhost:5173/candidates/7?action=call
+    Draft email: http://localhost:5173/candidates/7?action=draft&requirement=3
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NywiZXhwIjoxNzkwODgzMDg2LCJyIjozLCJ1IjoyfQ.Aq14pNgqJKBflO5cbw5NjlXcDmPSCKB2RW9uzWJSTUs
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjcsImV4cCI6MTc5MDg4MzA4NiwiciI6MywidSI6Mn0.5cTcDE44FzFCnuBtcbQSi-SnpHCmJuZBsY22FuL39Tw
+  - Omar Boateng (78% match) · last contact Never
+    Call: http://localhost:5173/candidates/16?action=call
+    Draft email: http://localhost:5173/candidates/16?action=draft&requirement=3
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6MTYsImV4cCI6MTc5MDg4MzA4NiwiciI6MywidSI6Mn0.5n0JleeARslzNvUqyK67PrTQzvUzFmqUN4FlQa9QiM8
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjE2LCJleHAiOjE3OTA4ODMwODYsInIiOjMsInUiOjJ9.K-rv2BYnZCwq6WLlQK09P1Myy-3ilYI7w3rlXUXBufA
+  - Chloe Moreno (76% match, re-engage) · last contact May 09
+    Call: http://localhost:5173/candidates/79?action=call
+    Draft email: http://localhost:5173/candidates/79?action=draft&requirement=3
+    Snooze: http://localhost:8000/api/public/digest-action/eyJhIjoic25vb3plIiwiYyI6NzksImV4cCI6MTc5MDg4MzA4NiwiciI6MywidSI6Mn0.ThJjkX9RFIOiNrs4VfM7fjPoC-4dG-3l3RnRdB5OL4A
+    Not a fit: http://localhost:8000/api/public/digest-action/eyJhIjoibm90X2ZpdCIsImMiOjc5LCJleHAiOjE3OTA4ODMwODYsInIiOjMsInUiOjJ9.mHDaO_GkK5U0gcN4xH-YfiM4uGkvnda5GG7M8HztJb0
+3. NEW INBOUND APPLICANTS
+- Fatima Okafor (47% fit) — applied for Data Engineer (Snowflake / Airflow): http://localhost:5173/candidates/5
+- Elena Rossi (36% fit) — applied for Senior Java Microservices Engineer: http://localhost:5173/candidates/4
+- Hannah Patel (29% fit) — applied for Senior Java Microservices Engineer: http://localhost:5173/candidates/1
+4. HOT REPLIES (NOT YET CONTACTED)
+- Lucia Rossi replied Sep 23 11:31 PM: http://localhost:5173/candidates/37?action=call
+5. FOLLOW-UPS
+- OVERDUE (Sep 19) Lucia Rossi — Interested follow-up: http://localhost:5173/candidates/37
+- OVERDUE (Sep 21) Fatima Nguyen — Process Explained follow-up: http://localhost:5173/candidates/52
+- OVERDUE (Sep 21) Yara Kim — Contacted follow-up: http://localhost:5173/candidates/22
+- OVERDUE (Sep 23) Diego Tanaka — Marketing Pipeline follow-up: http://localhost:5173/candidates/67
+- TODAY (11:00 AM) Mateo Kapoor — Qualified follow-up: http://localhost:5173/candidates/46
+- TODAY (11:00 AM) Leah Osei — Contacted follow-up: http://localhost:5173/candidates/31
+- TODAY (11:00 AM) Felix Osei — Docs Received follow-up: http://localhost:5173/candidates/61
+6. PENDING DOCUMENTS PAST SLA
+- Isabel Moreno (5 days) missing: EAD card (front and back), Training plan form — coordinated with our authorized team, Signed offer letter, Federal withholding form (W-4), Direct deposit form: http://localhost:5173/candidates/58
+Open Recruiter Home: http://localhost:5173
+Preferences: http://localhost:5173/settings?tab=digest
+Unsubscribe: http://localhost:8000/api/public/unsubscribe/eyJpZCI6MiwiayI6ImRpZ2VzdCJ9.4FE6ppIlnJk96GsiqSPyhb-ut8CO-DM3jjiC2Izvsqw

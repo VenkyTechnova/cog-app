@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>{{ subject }}</title>
+<style>
+  @media (max-width: 620px) {
+    .container { width: 100% !important; }
+    .px { padding-left: 16px !important; padding-right: 16px !important; }
+    .btn { display: inline-block !important; margin: 4px 4px 0 0 !important; }
+    .hide-sm { display: none !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;">
+<div style="display:none;max-height:0;overflow:hidden;">{{ preheader }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;">
+<tr><td align="center" style="padding:24px 8px;">
+<table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" style="width:600px;background:#ffffff;border-radius:12px;overflow:hidden;">
+
+  <tr><td class="px" style="background:#0f3d5e;padding:24px 28px;color:#ffffff;">
+    <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.8;">Cognitech Talent Acquisition</div>
+    <div style="font-size:22px;font-weight:700;margin-top:4px;">{{ title }}</div>
+    <div style="font-size:14px;opacity:.85;margin-top:4px;">{{ date_label }} · Hi {{ first_name }}, here's what's new since {{ since_label }}.</div>
+  </td></tr>
+
+  <tr><td class="px" style="padding:16px 28px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      {% for label, value, color in summary %}
+      <td align="center" style="padding:10px 4px;background:#f9fafb;border-radius:8px;">
+        <div style="font-size:22px;font-weight:700;color:{{ color }};">{{ value }}</div>
+        <div style="font-size:11px;color:#6b7280;">{{ label }}</div>
+      </td>{% if not loop.last %}<td width="6"></td>{% endif %}
+      {% endfor %}
+    </tr></table>
+  </td></tr>
+
+  {% if d.is_empty %}
+  <tr><td class="px" style="padding:24px 28px;">
+    <p style="margin:0;font-size:15px;">No new opportunities today — no new requirements, applicants, hot replies or due follow-ups. Enjoy the head start.</p>
+  </td></tr>
+  {% endif %}
+
+  {% macro actions(links) -%}
+    <a class="btn" href="{{ links.call }}" style="display:inline-block;background:#0f3d5e;color:#fff;text-decoration:none;font-size:12px;padding:6px 10px;border-radius:6px;margin-right:4px;">Call</a>
+    <a class="btn" href="{{ links.draft }}" style="display:inline-block;background:#e0f2fe;color:#0f3d5e;text-decoration:none;font-size:12px;padding:6px 10px;border-radius:6px;margin-right:4px;">Draft Email</a>
+    <a class="btn" href="{{ links.snooze }}" style="display:inline-block;background:#f3f4f6;color:#374151;text-decoration:none;font-size:12px;padding:6px 10px;border-radius:6px;margin-right:4px;">Snooze</a>
+    <a class="btn" href="{{ links.not_fit }}" style="display:inline-block;background:#fef2f2;color:#991b1b;text-decoration:none;font-size:12px;padding:6px 10px;border-radius:6px;">Not a Fit</a>
+  {%- endmacro %}
+
+  {% macro section(title, count, color) -%}
+  <tr><td class="px" style="padding:24px 28px 8px;">
+    <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:{{ color }};border-bottom:2px solid {{ color }};padding-bottom:6px;">{{ title }} <span style="color:#6b7280;font-weight:400;">({{ count }})</span></div>
+  </td></tr>
+  {%- endmacro %}
+
+  {% if d.kind == 'team_rollup' and d.team %}
+  {{ section('Team at a glance', d.team|length, '#0f3d5e') }}
+  <tr><td class="px" style="padding:0 28px;">
+    <table role="presentation" width="100%" cellpadding="6" cellspacing="0" style="font-size:13px;border-collapse:collapse;">
+      <tr style="color:#6b7280;text-align:left;"><th align="left">Recruiter</th><th>Due today</th><th>Overdue</th><th>Hot replies</th><th>Docs past SLA</th></tr>
+      {% for r in d.team %}
+      <tr style="border-top:1px solid #e5e7eb;"><td>{{ r.name }}</td><td align="center">{{ r.today }}</td><td align="center" style="color:{{ '#b91c1c' if r.overdue else '#111827' }};">{{ r.overdue }}</td><td align="center">{{ r.hot }}</td><td align="center">{{ r.pending_docs }}</td></tr>
+      {% endfor %}
+    </table>
+    {% if d.data_quality is not none %}<p style="font-size:13px;color:#374151;margin:10px 0 0;">Data-quality score: <strong>{{ d.data_quality }}</strong> / 100</p>{% endif %}
+  </td></tr>
+  {% endif %}
+
+  {% if d.requirements %}
+  {{ section('1–2 · New requirements & top matches', d.requirements|length, '#0f3d5e') }}
+  {% for r in d.requirements %}
+  <tr><td class="px" style="padding:8px 28px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;">
+      <tr><td style="padding:14px 16px;">
+        <div style="font-size:16px;font-weight:700;">{{ r.title }}
+          <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin-left:6px;background:{{ {'High':'#fee2e2','Medium':'#fef3c7','Low':'#e5e7eb'}[r.priority] }};color:{{ {'High':'#991b1b','Medium':'#92400e','Low':'#374151'}[r.priority] }};">{{ r.priority }}</span>
+        </div>
+        <div style="font-size:13px;color:#4b5563;margin-top:2px;">{{ r.client }} · {{ r.location }} · {{ r.rate_type }}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:4px;">{{ r.skills|join(', ') }}</div>
+        {% if r.matches %}
+        <div style="font-size:12px;font-weight:700;margin:12px 0 4px;color:#374151;">Top {{ r.matches|length }} matches from your database</div>
+        {% for m in r.matches %}
+        <div style="border-top:1px solid #f3f4f6;padding:8px 0;">
+          <div style="font-size:14px;"><a href="{{ m.links.open }}" style="color:#0f3d5e;font-weight:600;text-decoration:none;">{{ m.name }}</a>
+            <span style="font-size:12px;font-weight:700;color:{{ '#047857' if m.score >= 75 else ('#b45309' if m.score >= 55 else '#6b7280') }};">&nbsp;{{ m.score }}% match</span>
+            {% if m.reengagement %}<span style="font-size:11px;background:#ede9fe;color:#5b21b6;padding:1px 6px;border-radius:999px;">Re-engage</span>{% endif %}
+          </div>
+          <div style="font-size:12px;color:#6b7280;">{{ m.headline }} · last contact {{ m.last_contact }}{% if m.matched %} · ✓ {{ m.matched|join(', ') }}{% endif %}</div>
+          <div style="margin-top:6px;">{{ actions(m.links) }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div style="font-size:12px;color:#6b7280;margin-top:8px;">No strong matches in the database yet — the sourcing search strings are ready in the app.</div>
+        {% endif %}
+      </td></tr>
+    </table>
+  </td></tr>
+  {% endfor %}
+  {% endif %}
+
+  {% if d.applicants %}
+  {{ section('3 · New inbound applicants (ranked by fit)', d.applicants|length, '#0e7490') }}
+  {% for a in d.applicants %}
+  <tr><td class="px" style="padding:6px 28px;">
+    <div style="font-size:14px;"><a href="{{ a.links.open }}" style="color:#0f3d5e;font-weight:600;text-decoration:none;">{{ a.name }}</a> <span style="font-size:12px;font-weight:700;color:#0e7490;">{{ a.score }}% fit</span></div>
+    <div style="font-size:12px;color:#6b7280;">Applied for {{ a.applied_for }} · {{ a.headline }}</div>
+    <div style="margin-top:6px;">{{ actions(a.links) }}</div>
+  </td></tr>
+  {% endfor %}
+  {% endif %}
+
+  {% if d.hot_replies %}
+  {{ section('4 · Hot replies — not yet contacted', d.hot_replies|length, '#b91c1c') }}
+  {% for h in d.hot_replies %}
+  <tr><td class="px" style="padding:6px 28px;">
+    <div style="font-size:14px;"><a href="{{ h.links.open }}" style="color:#0f3d5e;font-weight:600;text-decoration:none;">{{ h.name }}</a> <span style="font-size:12px;color:#6b7280;">replied {{ h.replied }}</span></div>
+    {% if h.snippet %}<div style="font-size:12px;color:#374151;font-style:italic;">“{{ h.snippet }}”</div>{% endif %}
+    <div style="margin-top:6px;">{{ actions(h.links) }}</div>
+  </td></tr>
+  {% endfor %}
+  {% endif %}
+
+  {% if d.follow_ups_today or d.follow_ups_overdue %}
+  {{ section('5 · Follow-ups', d.follow_ups_today|length + d.follow_ups_overdue|length, '#7c3aed') }}
+  {% for f in d.follow_ups_overdue %}
+  <tr><td class="px" style="padding:6px 28px;">
+    <div style="font-size:14px;"><span style="font-size:11px;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:999px;">Overdue · {{ f.due }}</span> <a href="{{ f.links.open }}" style="color:#0f3d5e;font-weight:600;text-decoration:none;">{{ f.name }}</a></div>
+    <div style="font-size:12px;color:#6b7280;">{{ f.reason }}</div>
+    <div style="margin-top:6px;">{{ actions(f.links) }}</div>
+  </td></tr>
+  {% endfor %}
+  {% for f in d.follow_ups_today %}
+  <tr><td class="px" style="padding:6px 28px;">
+    <div style="font-size:14px;"><span style="font-size:11px;background:#ede9fe;color:#5b21b6;padding:1px 6px;border-radius:999px;">Today · {{ f.due }}</span> <a href="{{ f.links.open }}" style="color:#0f3d5e;font-weight:600;text-decoration:none;">{{ f.name }}</a></div>
+    <div style="font-size:12px;color:#6b7280;">{{ f.reason }}</div>
+    <div style="margin-top:6px;">{{ actions(f.links) }}</div>
+  </td></tr>
+  {% endfor %}
+  {% endif %}
+
+  {% if d.pending_documents %}
+  {{ section('6 · Pending documents past SLA', d.pending_documents|length, '#b45309') }}
+  {% for p in d.pending_documents %}
+  <tr><td class="px" style="padding:6px 28px;">
+    <div style="font-size:14px;"><a href="{{ p.links.open }}" style="color:#0f3d5e;font-weight:600;text-decoration:none;">{{ p.name }}</a> <span style="font-size:12px;color:#6b7280;">{{ p.days_open }} days open · {{ p.reminders }} reminders sent</span></div>
+    <div style="font-size:12px;color:#6b7280;">Missing: {{ p.missing|join(', ') }}</div>
+    <div style="margin-top:6px;">{{ actions(p.links) }}</div>
+  </td></tr>
+  {% endfor %}
+  {% endif %}
+
+  {% if d.breached_tickets %}
+  {{ section('Delegated tickets past SLA', d.breached_tickets|length, '#b91c1c') }}
+  {% for t in d.breached_tickets %}
+  <tr><td class="px" style="padding:4px 28px;font-size:13px;">#{{ t.id }} · {{ t.team|capitalize }} · {{ t.subject }} <span style="color:#6b7280;">(due {{ t.due }})</span></td></tr>
+  {% endfor %}
+  {% endif %}
+
+  <tr><td class="px" style="padding:28px;">
+    <a href="{{ app_url }}" style="display:inline-block;background:#0f3d5e;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px;">Open Recruiter Home</a>
+  </td></tr>
+
+  <tr><td class="px" style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;font-size:11px;color:#6b7280;">
+    Standardize, so the conversation can be human. Sent to {{ d.user.email }} at {{ sent_label }}.<br>
+    <a href="{{ prefs_url }}" style="color:#6b7280;">Digest preferences</a> · <a href="{{ unsubscribe_url }}" style="color:#6b7280;">Unsubscribe from the daily digest</a>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

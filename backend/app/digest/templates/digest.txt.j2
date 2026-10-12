@@ -1,0 +1,54 @@
+{{ title }} — {{ date_label }}
+Hi {{ first_name }}, here's what's new since {{ since_label }}.
+
+{% for label, value, _ in summary %}{{ label }}: {{ value }}{% if not loop.last %} | {% endif %}{% endfor %}
+
+{% if d.is_empty %}No new opportunities today — no new requirements, applicants, hot replies or due follow-ups.
+{% endif %}
+{%- if d.kind == 'team_rollup' and d.team %}
+TEAM AT A GLANCE
+{% for r in d.team %}- {{ r.name }}: {{ r.today }} due today, {{ r.overdue }} overdue, {{ r.hot }} hot replies, {{ r.pending_docs }} docs past SLA
+{% endfor %}{% if d.data_quality is not none %}Data-quality score: {{ d.data_quality }}/100
+{% endif %}
+{% endif %}
+{%- if d.requirements %}
+1-2. NEW REQUIREMENTS & TOP MATCHES
+{% for r in d.requirements %}
+* {{ r.title }} [{{ r.priority }}] — {{ r.client }} · {{ r.location }} · {{ r.rate_type }}
+  Skills: {{ r.skills|join(', ') }}
+{% for m in r.matches %}  - {{ m.name }} ({{ m.score }}% match{% if m.reengagement %}, re-engage{% endif %}) · last contact {{ m.last_contact }}
+    Call: {{ m.links.call }}
+    Draft email: {{ m.links.draft }}
+    Snooze: {{ m.links.snooze }}
+    Not a fit: {{ m.links.not_fit }}
+{% endfor %}{% endfor %}
+{% endif %}
+{%- if d.applicants %}
+3. NEW INBOUND APPLICANTS
+{% for a in d.applicants %}- {{ a.name }} ({{ a.score }}% fit) — applied for {{ a.applied_for }}: {{ a.links.open }}
+{% endfor %}
+{% endif %}
+{%- if d.hot_replies %}
+4. HOT REPLIES (NOT YET CONTACTED)
+{% for h in d.hot_replies %}- {{ h.name }} replied {{ h.replied }}: {{ h.links.call }}
+{% endfor %}
+{% endif %}
+{%- if d.follow_ups_today or d.follow_ups_overdue %}
+5. FOLLOW-UPS
+{% for f in d.follow_ups_overdue %}- OVERDUE ({{ f.due }}) {{ f.name }} — {{ f.reason }}: {{ f.links.open }}
+{% endfor %}{% for f in d.follow_ups_today %}- TODAY ({{ f.due }}) {{ f.name }} — {{ f.reason }}: {{ f.links.open }}
+{% endfor %}
+{% endif %}
+{%- if d.pending_documents %}
+6. PENDING DOCUMENTS PAST SLA
+{% for p in d.pending_documents %}- {{ p.name }} ({{ p.days_open }} days) missing: {{ p.missing|join(', ') }}: {{ p.links.open }}
+{% endfor %}
+{% endif %}
+{%- if d.breached_tickets %}
+DELEGATED TICKETS PAST SLA
+{% for t in d.breached_tickets %}- #{{ t.id }} {{ t.team }}: {{ t.subject }} (due {{ t.due }})
+{% endfor %}
+{% endif %}
+Open Recruiter Home: {{ app_url }}
+Preferences: {{ prefs_url }}
+Unsubscribe: {{ unsubscribe_url }}

@@ -1,0 +1,55 @@
+# Local stack: Postgres, API, worker/scheduler, web (nginx), Mailhog (view outgoing mail at http://localhost:8025)
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cognitech
+      POSTGRES_PASSWORD: cognitech
+      POSTGRES_DB: cognitech
+    volumes: [pgdata:/var/lib/postgresql/data]
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognitech"]
+      interval: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports: ["1025:1025", "8025:8025"]
+
+  api:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://cognitech:cognitech@db:5432/cognitech
+      EMBEDDED_WORKER: "false"
+      MAIL_BACKEND: smtp
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      STORAGE_PATH: /data/storage
+    volumes: [docstore:/data/storage]
+    depends_on: { db: { condition: service_healthy } }
+    command: sh -c "python -m app.seed.run && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports: ["8000:8000"]
+
+  worker:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://cognitech:cognitech@db:5432/cognitech
+      MAIL_BACKEND: smtp
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      STORAGE_PATH: /data/storage
+    volumes: [docstore:/data/storage]
+    depends_on: [api]
+    command: python -m app.scheduler
+
+  web:
+    build: ./frontend
+    depends_on: [api]
+    ports: ["5173:80"]
+
+volumes:
+  pgdata:
+  docstore:
