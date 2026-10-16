@@ -5,7 +5,7 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import or_
@@ -29,7 +29,7 @@ from ..constants import (
 )
 from ..db import get_db
 from ..deps import client_ip, current_user, get_candidate_for, require_roles
-from ..engine import ai, compliance, dedupe, documents, followups, matching, outreach, stages, tickets
+from ..engine import ai, compliance, dedupe, documents, followups, matching, offers, outreach, stages, tickets
 from ..engine.events import emit
 from ..engine.intake import upsert_candidate
 from ..models import (
@@ -44,6 +44,7 @@ from ..models import (
     FollowUp,
     Interaction,
     Match,
+    OfferLetter,
     Requirement,
     Sequence,
     StageTransition,
@@ -224,6 +225,11 @@ def get_360(cid: int, request: Request, db: Session = Depends(get_db), u: User =
             "folder": row(folder) if folder else None,
         },
         "consent": [row(x, exclude={"token"}) for x in consent],
+        "offer_letters": [
+            {**row(o, exclude={"storage_key"}), "uploaded_by_name": users.get(o.uploaded_by), "submitted_by_name": users.get(o.submitted_by), "approver_name": users.get(o.approver_id)}
+            for o in db.query(OfferLetter).filter_by(candidate_id=cid).order_by(OfferLetter.id.desc()).all()
+        ],
+        "offer_approvers": [{"id": a.id, "name": a.name, "role": a.role} for a in offers.approvers(db)],
         "tickets": [row(t) for t in db.query(Ticket).filter_by(candidate_id=cid).order_by(Ticket.id.desc()).all()],
         "applications": [row(a) for a in db.query(Application).filter_by(candidate_id=cid).all()],
         "transitions": [row(t) for t in db.query(StageTransition).filter_by(candidate_id=cid).order_by(StageTransition.at).all()],
@@ -618,6 +624,79 @@ def verify(cid: int, item_id: int, body: VerifyIn, db: Session = Depends(get_db)
         raise HTTPException(422, str(e))
     db.commit()
     return row(item, exclude={"storage_key"})
+
+
+# ---------------------------------------------------------------------------
+# Offer letters: Onboarding uploads a PDF and submits it to an internal approver
+# ---------------------------------------------------------------------------
+OFFER_EDITORS = ("onboarding", "ta_lead")
+
+
+def _offer(db: Session, cid: int, oid: int) -> OfferLetter:
+    o = db.get(OfferLetter, oid)
+    if o is None or o.candidate_id != cid:
+        raise HTTPException(404, "Offer letter not found")
+    return o
+
+
+@router.post("/{cid}/offer-letters")
+async def upload_offer_letter(cid: int, file: UploadFile = File(...), notes: str = Form(""), db: Session = Depends(get_db), u: User = Depends(require_roles(*OFFER_EDITORS))):
+    c = get_candidate_for(db, u, cid)
+    data = await file.read()
+    try:
+        o = offers.upload(db, c, u, file.filename or "offer_letter.pdf", file.content_type or "", data, notes)
+    except offers.OfferError as e:
+        raise HTTPException(422, str(e))
+    db.commit()
+    return row(o, exclude={"storage_key"})
+
+
+class OfferSubmitIn(BaseModel):
+    approver_id: int
+
+
+@router.post("/{cid}/offer-letters/{oid}/submit")
+def submit_offer_letter(cid: int, oid: int, body: OfferSubmitIn, db: Session = Depends(get_db), u: User = Depends(require_roles(*OFFER_EDITORS))):
+    get_candidate_for(db, u, cid)
+    o = _offer(db, cid, oid)
+    try:
+        offers.submit(db, o, u, body.approver_id)
+    except offers.OfferError as e:
+        db.rollback()
+        raise HTTPException(422, str(e))
+    db.commit()
+    return row(o, exclude={"storage_key"})
+
+
+class OfferDecisionIn(BaseModel):
+    approve: bool
+    note: str = ""
+
+
+@router.post("/{cid}/offer-letters/{oid}/decision")
+def decide_offer_letter(cid: int, oid: int, body: OfferDecisionIn, db: Session = Depends(get_db), u: User = Depends(current_user)):
+    get_candidate_for(db, u, cid)
+    o = _offer(db, cid, oid)
+    if u.id != o.approver_id and u.role != "admin":
+        raise HTTPException(403, "Only the assigned approver can approve or reject this offer letter")
+    try:
+        offers.decide(db, o, body.approve, body.note, u, via="app")
+    except offers.OfferError as e:
+        raise HTTPException(422, str(e))
+    db.commit()
+    return row(o, exclude={"storage_key"})
+
+
+@router.get("/{cid}/offer-letters/{oid}/download")
+def download_offer_letter(cid: int, oid: int, request: Request, db: Session = Depends(get_db), u: User = Depends(current_user)):
+    c = get_candidate_for(db, u, cid)
+    o = _offer(db, cid, oid)
+    allowed = u.role in ("onboarding", "ta_lead", "admin") or u.id == o.approver_id or (u.role == "recruiter" and c.owner_id == u.id)
+    if not allowed:
+        raise HTTPException(403, "Only Onboarding, TA leads, the approver or the owning recruiter can open offer letters")
+    audit(db, "offer.downloaded", "candidate", cid, u.id, {"offer_id": oid}, client_ip(request))
+    db.commit()
+    return Response(get_storage().get(o.storage_key), media_type=o.content_type, headers={"Content-Disposition": f'inline; filename="{o.filename}"'})
 
 
 # ---------------------------------------------------------------------------

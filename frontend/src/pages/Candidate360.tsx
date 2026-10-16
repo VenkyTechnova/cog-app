@@ -20,6 +20,7 @@ import {
   Phone,
   Send,
   ShieldCheck,
+  Upload,
   Sparkles,
   TicketCheck,
   XCircle,
@@ -45,7 +46,7 @@ export default function Candidate360() {
   const { data, error, loading, reload } = useApi<any>(`/api/candidates/${id}`, [id]);
   const { data: meta } = useApi<any>("/api/candidates/meta");
   const { data: users } = useApi<any[]>("/api/users");
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState(params.get("tab") || "overview");
   const [modal, setModal] = useState<null | "call" | "stage" | "delegate" | "followup">(null);
   const staff = isStaff(user);
 
@@ -190,6 +191,7 @@ export default function Candidate360() {
             { key: "qualification", label: "Qualification" },
             { key: "process", label: "Process & consent" },
             { key: "documents", label: "Documents", count: data.documents.items.length || undefined },
+            { key: "offer", label: "Offer letter", count: data.offer_letters?.filter((o: any) => o.status === "pending_approval").length || undefined },
             { key: "outreach", label: "Outreach", count: data.drafts.filter((d: any) => ["pending_approval", "blocked", "manual_send"].includes(d.status)).length || undefined },
             { key: "timeline", label: "Timeline", count: data.timeline.length },
             { key: "tickets", label: "Tickets", count: data.tickets.length || undefined },
@@ -202,6 +204,7 @@ export default function Candidate360() {
         {tab === "qualification" && <Qualification data={data} meta={meta} staff={staff} reload={reload} />}
         {tab === "process" && <ProcessConsent data={data} meta={meta} staff={staff} reload={reload} />}
         {tab === "documents" && <Documents data={data} reload={reload} />}
+        {tab === "offer" && <OfferLetter data={data} reload={reload} />}
         {tab === "outreach" && <Outreach data={data} reload={reload} />}
         {tab === "timeline" && <Timeline items={data.timeline} />}
         {tab === "tickets" && <Tickets items={data.tickets} />}
@@ -897,6 +900,203 @@ function ProcessConsent({ data, meta, staff, reload }: any) {
 }
 
 // ---------------------------------------------------------------------------
+const OFFER_TONE: Record<string, string> = { uploaded: "blue", pending_approval: "amber", approved: "green", rejected: "red", superseded: "gray" };
+const ROLE_LABEL: Record<string, string> = { ta_lead: "TA lead", admin: "Admin" };
+const OFFER_LABEL: Record<string, string> = { uploaded: "Ready to submit", pending_approval: "Waiting for approval", approved: "Approved", rejected: "Rejected", superseded: "Replaced" };
+
+function OfferLetter({ data, reload }: any) {
+  const { user } = useAuth();
+  const toast = useToast();
+  const c = data.candidate;
+  const letters: any[] = data.offer_letters || [];
+  const approvers: any[] = (data.offer_approvers || []).filter((a: any) => a.id !== user?.id);
+  const current = letters.find((o) => o.status !== "superseded");
+  const history = letters.filter((o) => o !== current);
+  const canEdit = !!user && ["onboarding", "ta_lead", "admin"].includes(user.role);
+  const canOpen = !!user && (["onboarding", "ta_lead", "admin"].includes(user.role) || (user.role === "recruiter" && c.owner_id === user.id) || current?.approver_id === user.id);
+  const isApprover = !!user && !!current && current.status === "pending_approval" && (current.approver_id === user.id || user.role === "admin");
+
+  const [file, setFile] = useState<File | null>(null);
+  const [fileKey, setFileKey] = useState(0); // remount the file input to clear it after upload
+  const [notes, setNotes] = useState("");
+  const [approverId, setApproverId] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+
+  async function run(fn: () => Promise<any>, ok: string) {
+    setBusy(true);
+    try {
+      await fn();
+      toast("success", ok);
+      reload();
+      return true;
+    } catch (e) {
+      toast("error", errMsg(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function upload() {
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("notes", notes);
+    if (await run(() => api(`/api/candidates/${c.id}/offer-letters`, { method: "POST", form }), "Offer letter uploaded — now submit it for approval")) {
+      setFile(null);
+      setFileKey((k: number) => k + 1);
+      setNotes("");
+    }
+  }
+  async function open(o: any) {
+    try {
+      const res = await fetch(`/api/candidates/${c.id}/offer-letters/${o.id}/download`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+      window.open(URL.createObjectURL(await res.blob()), "_blank");
+    } catch (e) {
+      toast("error", errMsg(e));
+    }
+  }
+  const submit = () => run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/submit`, { approver_id: Number(approverId) }), "Sent for approval — the approver has been emailed");
+  const decide = (approve: boolean) =>
+    run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/decision`, { approve, note: approve ? "" : reason }), approve ? "Offer letter approved" : "Offer letter rejected").then((ok) => {
+      if (ok) {
+        setRejecting(false);
+        setReason("");
+      }
+    });
+
+  const step = !current ? 1 : current.status === "uploaded" ? 2 : current.status === "pending_approval" ? 3 : current.status === "approved" ? 4 : 1;
+  const steps = ["Upload offer letter", "Submit for approval", "Approver confirms", "Approved"];
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2 space-y-4">
+        <Card title="Offer letter" subtitle="Onboarding uploads the finished offer letter, then sends it to a TA lead or admin, who confirms their approval by email.">
+          <ol className="flex flex-wrap gap-x-6 gap-y-2 text-xs mb-4">
+            {steps.map((label, i) => (
+              <li key={label} className={cx("flex items-center gap-1.5", i + 1 < step || step === 4 ? "text-emerald-700 dark:text-emerald-300" : i + 1 === step ? "font-semibold text-brand-800 dark:text-brand-200" : "text-slate-400")}>
+                {i + 1 < step || step === 4 ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                {label}
+              </li>
+            ))}
+          </ol>
+
+          {current && (
+            <div className="rounded-lg border border-slate-200 dark:border-white/10 p-3 mb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <FileText className="h-4 w-4 text-[var(--series-1)]" />
+                <div className="flex-1 min-w-[12rem]">
+                  <div className="text-sm font-medium">{current.filename}</div>
+                  <div className="text-[11px] text-slate-500">
+                    Uploaded {fmtDateTime(current.uploaded_at)} by {current.uploaded_by_name || "—"}
+                    {current.submitted_at && ` · sent to ${current.approver_name} ${relTime(current.submitted_at)}`}
+                    {current.decided_at && ` · ${OFFER_LABEL[current.status].toLowerCase()} ${relTime(current.decided_at)}${current.decided_via === "email" ? " via email" : ""}`}
+                  </div>
+                </div>
+                <Badge tone={OFFER_TONE[current.status]}>{OFFER_LABEL[current.status]}</Badge>
+                {canOpen && (
+                  <Button size="sm" variant="ghost" icon={<Download className="h-3.5 w-3.5" />} onClick={() => open(current)}>
+                    Open
+                  </Button>
+                )}
+              </div>
+              {current.notes && <div className="text-xs text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">Notes: {current.notes}</div>}
+              {current.decision_note && (
+                <div className={cx("text-xs mt-2 whitespace-pre-wrap", current.status === "rejected" ? "text-red-700 dark:text-red-300" : "text-slate-600 dark:text-slate-300")}>
+                  {current.status === "rejected" ? "Reason: " : "Approver note: "}
+                  {current.decision_note}
+                </div>
+              )}
+            </div>
+          )}
+
+          {canEdit && current?.status === "uploaded" && (
+            <div className="flex flex-wrap items-end gap-2 mb-4">
+              <div className="flex-1 min-w-[14rem]">
+                <Field label="Approver">
+                  <select className="input" value={approverId} onChange={(e) => setApproverId(e.target.value)}>
+                    <option value="">Choose a TA lead or admin…</option>
+                    {approvers.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({ROLE_LABEL[a.role] || humanize(a.role)})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Button variant="primary" icon={<Send className="h-4 w-4" />} disabled={!approverId} loading={busy} onClick={submit}>
+                Send for approval
+              </Button>
+            </div>
+          )}
+
+          {isApprover && (
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 p-3 mb-4">
+              <div className="text-sm font-medium mb-2">Your approval is needed</div>
+              {!rejecting ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="success" icon={<Check className="h-4 w-4" />} loading={busy} onClick={() => decide(true)}>
+                    Confirm & approve
+                  </Button>
+                  <Button variant="ghost" onClick={() => setRejecting(true)}>
+                    Reject…
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <textarea className="input" rows={2} placeholder="What needs to change?" value={reason} onChange={(e) => setReason(e.target.value)} />
+                  <div className="flex gap-2">
+                    <Button variant="danger" disabled={!reason.trim()} loading={busy} onClick={() => decide(false)}>
+                      Reject offer letter
+                    </Button>
+                    <Button variant="ghost" onClick={() => setRejecting(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {canEdit && current?.status !== "approved" && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">{current ? "Upload a new version" : "Upload the offer letter"}</div>
+              <input key={fileKey} type="file" accept="application/pdf,.pdf" className="block text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-solid file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-50 dark:file:border-white/15 dark:file:bg-white/5 dark:file:text-slate-200" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+              <textarea className="input" rows={2} placeholder="Notes for the approver (optional): rate, start date, client…" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <Button icon={<Upload className="h-4 w-4" />} disabled={!file} loading={busy} onClick={upload}>
+                Upload PDF
+              </Button>
+              {current?.status === "pending_approval" && <div className="text-[11px] text-slate-500">Uploading a new version cancels the pending approval request.</div>}
+            </div>
+          )}
+          {!canEdit && !current && <div className="text-sm text-slate-500">No offer letter yet. Onboarding uploads it here.</div>}
+        </Card>
+      </div>
+
+      <Card title="History">
+        {history.length === 0 ? (
+          <div className="text-sm text-slate-500">No earlier versions.</div>
+        ) : (
+          <ul className="space-y-2">
+            {history.map((o) => (
+              <li key={o.id} className="text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 truncate">{o.filename}</span>
+                  <Badge tone={OFFER_TONE[o.status]}>{OFFER_LABEL[o.status]}</Badge>
+                </div>
+                <div className="text-slate-500">{fmtDateTime(o.uploaded_at)}</div>
+                {o.decision_note && <div className="text-slate-500">“{o.decision_note}”</div>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function Documents({ data, reload }: any) {
   const { user } = useAuth();
   const toast = useToast();

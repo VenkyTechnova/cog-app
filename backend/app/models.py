@@ -648,3 +648,31 @@ class DigestLog(Base):
 
     user = relationship("User")
     email = relationship("OutboundEmail")
+
+
+class OfferLetter(Base):
+    """An offer letter PDF uploaded by Onboarding and approved by an internal approver (TA lead / admin).
+
+    Lifecycle: uploaded -> pending_approval -> approved | rejected. Uploading a new version
+    supersedes any earlier letter that has not been approved.
+    """
+
+    __tablename__ = "offer_letters"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="uploaded", index=True)  # uploaded/pending_approval/approved/rejected/superseded
+    storage_key: Mapped[str] = mapped_column(String(400))
+    filename: Mapped[str] = mapped_column(String(250))
+    content_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    submitted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    decision_note: Mapped[str] = mapped_column(Text, default="")
+    decided_via: Mapped[str | None] = mapped_column(String(20), nullable=True)  # app / email
+
+    candidate = relationship("Candidate")

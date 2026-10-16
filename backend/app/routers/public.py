@@ -5,6 +5,7 @@ Every endpoint is authorised by an unguessable token (portal / consent) or an HM
 from __future__ import annotations
 
 import base64
+import html as html_lib
 from datetime import date
 from urllib.parse import unquote, urlparse
 
@@ -20,7 +21,7 @@ from ..engine import documents, followups
 from ..engine.events import emit
 from ..models import Candidate, ConsentRecord, DocumentItem, DocumentRequest, EmailEvent, Interaction, Match, OutboundEmail, User
 from ..settings_store import get_setting
-from ..util import aware, now, unsign
+from ..util import aware, now, to_local, unsign
 
 router = APIRouter(prefix="/api", tags=["public"])
 
@@ -133,6 +134,80 @@ def consent_post(token: str, body: dict, request: Request, db: Session = Depends
         notify(db, f"{c.full_name} declined to proceed", "Consider a no-pressure check-in.", user_ids=[c.owner_id], link=f"/candidates/{c.id}")
     db.commit()
     return {"status": rec.status}
+
+
+# ---------------------------------------------------------------------------
+# Offer letter approval (link emailed to the internal approver)
+# ---------------------------------------------------------------------------
+def _offer_or_page(db: Session, token: str):
+    from ..engine import offers
+
+    o = offers.from_token(db, token)
+    if o is None:
+        return None, _page("Link not valid", "<p>This approval link is invalid or has expired. Open the candidate in the app instead.</p>")
+    return o, None
+
+
+@router.get("/public/offer-approval/{token}")
+def offer_approval_page(token: str, db: Session = Depends(get_db)):
+    o, err = _offer_or_page(db, token)
+    if err:
+        return err
+    esc = html_lib.escape
+    c = o.candidate
+    submitter = db.get(User, o.submitted_by) if o.submitted_by else None
+    file_url = f"{get_settings().api_url}/api/public/offer-approval/{token}/file"
+    info = (
+        f"<p><b>Candidate:</b> {esc(c.full_name)}<br><b>Submitted by:</b> {esc(submitter.name if submitter else '-')}"
+        f"<br><b>File:</b> <a href='{file_url}' target='_blank'>{esc(o.filename)}</a></p>"
+        + (f"<p><b>Notes:</b><br>{esc(o.notes).replace(chr(10), '<br>')}</p>" if o.notes else "")
+    )
+    if o.status != "pending_approval":
+        when = to_local(aware(o.decided_at)).strftime("%b %d, %Y %I:%M %p") if o.decided_at else ""
+        return _page("Offer letter " + o.status.replace("_", " "), info + f"<p>This offer letter has already been <b>{esc(o.status.replace('_', ' '))}</b> {esc(when)}.</p>")
+    form = (
+        "<form method=post style='margin-top:16px'>"
+        "<label style='display:flex;gap:8px;align-items:flex-start;font-size:14px'><input type=checkbox name=confirm value=1 required style='margin-top:3px'>"
+        "<span>I have reviewed this offer letter and confirm my approval for it to be issued to the candidate.</span></label>"
+        "<textarea name=note rows=3 placeholder='Note (required if you reject)' style='width:100%;margin-top:12px;box-sizing:border-box;padding:8px;border:1px solid #d1d5db;border-radius:8px'></textarea>"
+        "<div style='display:flex;gap:8px;margin-top:12px'>"
+        "<button name=decision value=approve style='background:#0f3d5e;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer'>Approve</button>"
+        "<button name=decision value=reject formnovalidate style='background:#fff;color:#b91c1c;border:1px solid #b91c1c;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer'>Reject</button>"
+        "</div></form>"
+    )
+    return _page("Offer letter approval", info + "<p>Please open the PDF and review it before deciding.</p>" + form)
+
+
+@router.get("/public/offer-approval/{token}/file")
+def offer_approval_file(token: str, request: Request, db: Session = Depends(get_db)):
+    o, err = _offer_or_page(db, token)
+    if err:
+        return err
+    from ..storage import get_storage
+
+    audit(db, "offer.downloaded", "candidate", o.candidate_id, o.approver_id, {"offer_id": o.id, "via": "email_link"}, client_ip(request))
+    db.commit()
+    return Response(get_storage().get(o.storage_key), media_type=o.content_type, headers={"Content-Disposition": f'inline; filename="{o.filename}"'})
+
+
+@router.post("/public/offer-approval/{token}")
+def offer_approval_submit(token: str, decision: str = Form(...), note: str = Form(""), confirm: str = Form(""), db: Session = Depends(get_db)):
+    from ..engine import offers
+
+    o, err = _offer_or_page(db, token)
+    if err:
+        return err
+    approve = decision == "approve"
+    if approve and not confirm:
+        return _page("Please confirm", "<p>Tick the confirmation box to approve. <a href=''>Go back</a></p>")
+    try:
+        offers.decide(db, o, approve, note, None, via="email")
+    except offers.OfferError as e:
+        return _page("Not recorded", f"<p>{html_lib.escape(str(e))}. <a href=''>Go back</a></p>")
+    db.commit()
+    if approve:
+        return _page("Offer letter approved", f"<p>Thanks. The offer letter for {html_lib.escape(o.candidate.full_name)} is approved, and Onboarding has been notified.</p>")
+    return _page("Offer letter rejected", "<p>Onboarding has been notified with your note so they can upload a corrected version.</p>")
 
 
 # ---------------------------------------------------------------------------
