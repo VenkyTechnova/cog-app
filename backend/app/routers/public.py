@@ -213,29 +213,58 @@ def offer_approval_submit(token: str, decision: str = Form(...), note: str = For
 # ---------------------------------------------------------------------------
 # Unsubscribe (candidates: outreach emails; staff: daily digest)
 # ---------------------------------------------------------------------------
-@router.get("/public/unsubscribe/{token}")
-def unsubscribe(token: str, db: Session = Depends(get_db)):
+_BTN = "background:#0f3d5e;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer"
+
+
+def _unsubscribe_target(db: Session, token: str):
     body = unsign(token)
-    if not body:
+    if not body or body.get("k") not in ("candidate", "digest"):
+        return None, None
+    obj = db.get(Candidate if body["k"] == "candidate" else User, body["id"])
+    return body["k"], obj
+
+
+@router.get("/public/unsubscribe/{token}")
+def unsubscribe_confirm(token: str, db: Session = Depends(get_db)):
+    """Opening the link only asks for confirmation.
+
+    Corporate link scanners (Outlook Safe Links, Mimecast, ...) open every link in an email,
+    so a GET must never change anything. The change happens on POST: the button below,
+    or a mail client's RFC 8058 one-click request.
+    """
+    kind, obj = _unsubscribe_target(db, token)
+    if obj is None:
         return _page("Link not valid", "<p>This unsubscribe link is invalid.</p>")
-    if body["k"] == "candidate":
-        c = db.get(Candidate, body["id"])
-        if c:
-            c.email_opt_out = True
+    if kind == "candidate":
+        if obj.email_opt_out:
+            return _page("You're unsubscribed", "<p>You're already unsubscribed from Cognitech Technologies outreach emails.</p>")
+        title, text, label = "Unsubscribe from Cognitech emails?", "You won't receive further outreach emails from Cognitech Technologies.", "Unsubscribe"
+    else:
+        if not obj.digest_enabled:
+            return _page("Daily digest is off", f"<p>Your daily digest is already turned off. You can turn it back on in <a href='{get_settings().app_url}/settings?tab=digest'>Settings → Digest</a>.</p>")
+        title, text, label = "Turn off your daily digest?", "You'll stop receiving the daily New Opportunities email.", "Turn off digest"
+    return _page(title, f"<p>{text}</p><form method=post><button style='{_BTN}'>{label}</button></form>")
+
+
+@router.post("/public/unsubscribe/{token}")
+def unsubscribe(token: str, request: Request, db: Session = Depends(get_db)):
+    kind, obj = _unsubscribe_target(db, token)
+    if obj is None:
+        return _page("Link not valid", "<p>This unsubscribe link is invalid.</p>")
+    if kind == "candidate":
+        if not obj.email_opt_out:
+            obj.email_opt_out = True
             from ..engine.outreach import stop_sequences
 
-            stop_sequences(db, c.id, "unsubscribed")
-            audit(db, "candidate.unsubscribed", "candidate", c.id, None, {"via": "link"})
+            stop_sequences(db, obj.id, "unsubscribed")
+            audit(db, "candidate.unsubscribed", "candidate", obj.id, None, {"via": "link"}, client_ip(request))
             db.commit()
         return _page("You're unsubscribed", "<p>You won't receive further outreach emails from Cognitech Technologies. If this was a mistake, just reply to your recruiter.</p>")
-    if body["k"] == "digest":
-        u = db.get(User, body["id"])
-        if u:
-            u.digest_enabled = False
-            audit(db, "digest.unsubscribed", "user", u.id, u.id, {})
-            db.commit()
-        return _page("Daily digest turned off", f"<p>You can turn it back on any time in <a href='{get_settings().app_url}/settings?tab=digest'>Settings → Digest</a>.</p>")
-    return _page("Link not valid", "")
+    if obj.digest_enabled:
+        obj.digest_enabled = False
+        audit(db, "digest.unsubscribed", "user", obj.id, obj.id, {}, client_ip(request))
+        db.commit()
+    return _page("Daily digest turned off", f"<p>You can turn it back on any time in <a href='{get_settings().app_url}/settings?tab=digest'>Settings → Digest</a>.</p>")
 
 
 # ---------------------------------------------------------------------------

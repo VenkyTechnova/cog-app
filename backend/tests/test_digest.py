@@ -143,8 +143,14 @@ def test_one_click_actions_and_unsubscribe(db, client, users, make_candidate, ma
     # Unsubscribe from digest
     from app.mail import unsubscribe_url
 
-    resp = client.get(urlparse(unsubscribe_url("digest", users["recruiter"].id)).path)
-    assert resp.status_code == 200
+    path = urlparse(unsubscribe_url("digest", users["recruiter"].id)).path
+    # Opening the link (or a link scanner fetching it) only shows a confirmation page.
+    resp = client.get(path)
+    assert resp.status_code == 200 and "<form method=post>" in resp.text
+    db.expire_all()
+    assert db.get(User, users["recruiter"].id).digest_enabled is True
+    resp = client.post(path)
+    assert resp.status_code == 200 and "turned off" in resp.text
     db.expire_all()
     assert db.get(User, users["recruiter"].id).digest_enabled is False
 
