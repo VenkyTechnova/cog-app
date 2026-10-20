@@ -6,6 +6,7 @@ Candidate-facing mail passes a final compliance gate here, regardless of the cal
 """
 from __future__ import annotations
 
+import email.policy
 import html as html_lib
 import logging
 import re
@@ -119,6 +120,27 @@ def send_email(
     return rec
 
 
+# max_line_length=998 (the RFC 5322 limit) stops the email package from folding long
+# headers: folding RFC 2047-encodes List-Unsubscribe, which mail clients then can't use,
+# and breaks long subjects onto a second line.
+MAIL_POLICY = email.policy.default.clone(max_line_length=998)
+
+
+def build_message(sender: str, to: str, subject: str, text: str, html: str, attachments: list[dict], unsubscribe: str | None) -> EmailMessage:
+    msg = EmailMessage(policy=MAIL_POLICY)
+    msg["From"], msg["To"], msg["Subject"] = sender, to, subject
+    if unsubscribe:
+        msg["List-Unsubscribe"] = f"<{unsubscribe}>"
+        # RFC 8058 one-click: Gmail / Outlook POST to the URL instead of opening it.
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    msg.set_content(text)
+    msg.add_alternative(html, subtype="html")
+    for a in attachments:
+        maintype, subtype = (a.get("content_type") or "application/octet-stream").split("/", 1)
+        msg.add_attachment(a["content"], maintype=maintype, subtype=subtype, filename=a["filename"])
+    return msg
+
+
 def _transport(to: str, subject: str, text: str, html: str, attachments: list[dict], unsubscribe: str | None) -> str | None:
     s = get_settings()
     backend = s.mail_backend
@@ -126,15 +148,7 @@ def _transport(to: str, subject: str, text: str, html: str, attachments: list[di
         log.info("EMAIL → %s | %s\n%s", to, subject, text[:500])
         return "console"
     if backend == "smtp":
-        msg = EmailMessage()
-        msg["From"], msg["To"], msg["Subject"] = s.mail_from, to, subject
-        if unsubscribe:
-            msg["List-Unsubscribe"] = f"<{unsubscribe}>"
-        msg.set_content(text)
-        msg.add_alternative(html, subtype="html")
-        for a in attachments:
-            maintype, subtype = (a.get("content_type") or "application/octet-stream").split("/", 1)
-            msg.add_attachment(a["content"], maintype=maintype, subtype=subtype, filename=a["filename"])
+        msg = build_message(s.mail_from, to, subject, text, html, attachments, unsubscribe)
         with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=20) as smtp:
             if s.smtp_tls:
                 smtp.starttls()
@@ -157,7 +171,7 @@ def _transport(to: str, subject: str, text: str, html: str, attachments: list[di
                 {"content": base64.b64encode(a["content"]).decode(), "filename": a["filename"], "type": a.get("content_type")} for a in attachments
             ]
         if unsubscribe:
-            payload["headers"] = {"List-Unsubscribe": f"<{unsubscribe}>"}
+            payload["headers"] = {"List-Unsubscribe": f"<{unsubscribe}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
         r = httpx.post(
             "https://api.sendgrid.com/v3/mail/send", json=payload, headers={"Authorization": f"Bearer {s.sendgrid_api_key}"}, timeout=20
         )
