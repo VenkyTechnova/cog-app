@@ -226,7 +226,7 @@ def get_360(cid: int, request: Request, db: Session = Depends(get_db), u: User =
         },
         "consent": [row(x, exclude={"token"}) for x in consent],
         "offer_letters": [
-            {**row(o, exclude={"storage_key"}), "uploaded_by_name": users.get(o.uploaded_by), "submitted_by_name": users.get(o.submitted_by), "approver_name": users.get(o.approver_id)}
+            {**row(o, exclude={"storage_key"}), "uploaded_by_name": users.get(o.uploaded_by), "submitted_by_name": users.get(o.submitted_by), "approver_name": users.get(o.approver_id), "sent_by_name": users.get(o.sent_by)}
             for o in db.query(OfferLetter).filter_by(candidate_id=cid).order_by(OfferLetter.id.desc()).all()
         ],
         "offer_approvers": [{"id": a.id, "name": a.name, "role": a.role} for a in offers.approvers(db)],
@@ -627,9 +627,9 @@ def verify(cid: int, item_id: int, body: VerifyIn, db: Session = Depends(get_db)
 
 
 # ---------------------------------------------------------------------------
-# Offer letters: Onboarding uploads a PDF and submits it to an internal approver
+# Offer letters: Onboarding uploads a PDF, Payroll approves it, Onboarding emails it to the candidate
 # ---------------------------------------------------------------------------
-OFFER_EDITORS = ("onboarding", "ta_lead")
+OFFER_EDITORS = ("onboarding",)
 
 
 def _offer(db: Session, cid: int, oid: int) -> OfferLetter:
@@ -677,11 +677,28 @@ class OfferDecisionIn(BaseModel):
 def decide_offer_letter(cid: int, oid: int, body: OfferDecisionIn, db: Session = Depends(get_db), u: User = Depends(current_user)):
     get_candidate_for(db, u, cid)
     o = _offer(db, cid, oid)
-    if u.id != o.approver_id and u.role != "admin":
-        raise HTTPException(403, "Only the assigned approver can approve or reject this offer letter")
+    if u.id != o.approver_id:
+        raise HTTPException(403, "Only the assigned Payroll approver can approve or reject this offer letter")
     try:
         offers.decide(db, o, body.approve, body.note, u, via="app")
     except offers.OfferError as e:
+        raise HTTPException(422, str(e))
+    db.commit()
+    return row(o, exclude={"storage_key"})
+
+
+class OfferSendIn(BaseModel):
+    message: str = ""
+
+
+@router.post("/{cid}/offer-letters/{oid}/send")
+def send_offer_letter(cid: int, oid: int, body: OfferSendIn, db: Session = Depends(get_db), u: User = Depends(require_roles(*OFFER_EDITORS))):
+    get_candidate_for(db, u, cid)
+    o = _offer(db, cid, oid)
+    try:
+        offers.send_to_candidate(db, o, u, body.message)
+    except offers.OfferError as e:
+        db.rollback()
         raise HTTPException(422, str(e))
     db.commit()
     return row(o, exclude={"storage_key"})

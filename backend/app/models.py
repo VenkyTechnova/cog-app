@@ -651,16 +651,17 @@ class DigestLog(Base):
 
 
 class OfferLetter(Base):
-    """An offer letter PDF uploaded by Onboarding and approved by an internal approver (TA lead / admin).
+    """An offer letter PDF uploaded by Onboarding and approved by a Payroll team member.
 
-    Lifecycle: uploaded -> pending_approval -> approved | rejected. Uploading a new version
-    supersedes any earlier letter that has not been approved.
+    Lifecycle: uploaded -> pending_approval -> approved | rejected; approved -> sent once it has been
+    emailed to the candidate. The letter is uploaded once; a new version is only accepted after a rejection.
+    (Letters from before that rule may be "superseded".)
     """
 
     __tablename__ = "offer_letters"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), index=True)
-    status: Mapped[str] = mapped_column(String(20), default="uploaded", index=True)  # uploaded/pending_approval/approved/rejected/superseded
+    status: Mapped[str] = mapped_column(String(20), default="uploaded", index=True)  # uploaded/pending_approval/approved/rejected/superseded/sent
     storage_key: Mapped[str] = mapped_column(String(400))
     filename: Mapped[str] = mapped_column(String(250))
     content_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
@@ -674,5 +675,9 @@ class OfferLetter(Base):
     decided_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
     decision_note: Mapped[str] = mapped_column(Text, default="")
     decided_via: Mapped[str | None] = mapped_column(String(20), nullable=True)  # app / email
+    sent_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    sent_to: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    email_id: Mapped[str | None] = mapped_column(ForeignKey("outbound_emails.id"), nullable=True)
 
     candidate = relationship("Candidate")

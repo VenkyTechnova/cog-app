@@ -1,7 +1,9 @@
-"""Offer letters: Onboarding uploads a finished PDF and submits it to an internal approver.
+"""Offer letters: Onboarding uploads a finished PDF once and submits it to Payroll for approval.
 
-The approver (a TA lead or admin) gets an email with a signed link to a review page where they can
+The approver (a Payroll team member) gets an email with a signed link to a review page where they can
 open the PDF and approve or reject it. They can also decide from the candidate's Offer letter tab.
+Once approved, Onboarding emails the letter to the candidate with the PDF attached. The letter is
+uploaded one time; a new version can only be uploaded after Payroll rejects it.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ from ..storage import get_storage
 from ..util import now, sign, unsign
 from .documents import ensure_folder
 
-APPROVER_ROLES = ("ta_lead", "admin")
+APPROVER_ROLES = ("payroll",)
 LINK_TTL_DAYS = 14
 
 
@@ -35,9 +37,10 @@ def upload(db: Session, c: Candidate, user: User, filename: str, content_type: s
         raise OfferError(f"File is larger than {max_mb:g} MB")
     if len(data) < 200:
         raise OfferError("File looks empty or unreadable")
-    # A new version replaces any earlier letter that hasn't been approved yet.
-    for old in db.query(OfferLetter).filter(OfferLetter.candidate_id == c.id, OfferLetter.status.in_(["uploaded", "pending_approval"])).all():
-        old.status = "superseded"
+    # One-time upload: a corrected version is only accepted after Payroll rejects the letter.
+    active = db.query(OfferLetter).filter(OfferLetter.candidate_id == c.id, OfferLetter.status.in_(["uploaded", "pending_approval", "approved", "sent"])).first()
+    if active is not None:
+        raise OfferError(f"An offer letter has already been uploaded ({active.status.replace('_', ' ')}); a new one can only be uploaded if Payroll rejects it")
     folder = ensure_folder(db, c)
     key = f"{folder.path}/04_Offer/offer_letter_draft-{now():%Y%m%d%H%M%S}.pdf"
     get_storage().put(key, data)
@@ -79,7 +82,7 @@ def submit(db: Session, o: OfferLetter, user: User, approver_id: int) -> OfferLe
         raise OfferError(f"This offer letter is already {o.status.replace('_', ' ')}")
     approver = db.get(User, approver_id)
     if approver is None or not approver.is_active or approver.role not in APPROVER_ROLES:
-        raise OfferError("Choose a TA lead or admin as the approver")
+        raise OfferError("Choose a Payroll team member as the approver")
     if approver.id == user.id:
         raise OfferError("You can't approve your own offer letter; choose another approver")
     c = db.get(Candidate, o.candidate_id)
@@ -150,5 +153,56 @@ def decide(db: Session, o: OfferLetter, approve: bool, note: str, user: User | N
         if o.decision_note:
             body += f"\n\nNote: {o.decision_note}"
         notify(db, f"Offer letter {verb}: {c.full_name}", body, user_ids=[o.submitted_by], link=f"/candidates/{c.id}?tab=offer", kind="success" if approve else "warning", email=True)
+    db.flush()
+    return o
+
+
+def send_to_candidate(db: Session, o: OfferLetter, user: User, message: str = "") -> OfferLetter:
+    """Email the approved offer letter to the candidate, with the PDF attached."""
+    from ..mail import send_email
+
+    if o.status != "approved":
+        raise OfferError("Only an approved offer letter can be sent" if o.status != "sent" else "This offer letter has already been sent")
+    c = db.get(Candidate, o.candidate_id)
+    if c.purged:
+        raise OfferError("Candidate record has been purged")
+    if not c.email:
+        raise OfferError("Add the candidate's email address before sending the offer letter")
+    if c.email_opt_out:
+        raise OfferError("Candidate has unsubscribed from emails; share the offer letter another way")
+    message = (message or "").strip()
+    text = (
+        f"Hi {c.full_name.split(' ')[0]},\n\n"
+        "Thank you for your time through our process. Please find your offer letter from Cognitech Technologies attached.\n\n"
+        + (f"{message}\n\n" if message else "")
+        + "Please review it carefully, and reply to this email if you have any questions.\n\n"
+        f"Best regards,\n{user.name}\nCognitech Technologies"
+    )
+    pdf = get_storage().get(o.storage_key)
+    rec = send_email(
+        db,
+        c.email,
+        "Your offer letter from Cognitech Technologies",
+        text,
+        kind="candidate",
+        candidate_id=c.id,
+        user_id=user.id,
+        track=False,
+        attachments=[{"filename": o.filename, "content": pdf, "content_type": o.content_type}],
+    )
+    if rec.status != "sent":
+        raise OfferError("The offer letter could not be sent: " + (rec.error or "unknown error"))
+    o.status = "sent"
+    o.sent_by = user.id
+    o.sent_at = now()
+    o.sent_to = c.email
+    o.email_id = rec.id
+    c.last_contact_at = now()
+    db.add(Interaction(candidate_id=c.id, user_id=user.id, type="offer_letter", direction="out", subject=f"Offer letter emailed to {c.email}", body=message, meta={"offer_id": o.id, "email_id": rec.id}, occurred_at=now()))
+    audit(db, "offer.sent", "candidate", c.id, user.id, {"offer_id": o.id, "email_id": rec.id, "to": c.email})
+    if c.owner_id and c.owner_id != user.id:
+        from .notify import notify
+
+        notify(db, f"Offer letter sent: {c.full_name}", f"{user.name} emailed the approved offer letter to {c.full_name}.", user_ids=[c.owner_id], link=f"/candidates/{c.id}?tab=offer", kind="success")
     db.flush()
     return o

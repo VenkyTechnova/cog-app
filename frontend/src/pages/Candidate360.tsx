@@ -900,9 +900,9 @@ function ProcessConsent({ data, meta, staff, reload }: any) {
 }
 
 // ---------------------------------------------------------------------------
-const OFFER_TONE: Record<string, string> = { uploaded: "blue", pending_approval: "amber", approved: "green", rejected: "red", superseded: "gray" };
-const ROLE_LABEL: Record<string, string> = { ta_lead: "TA lead", admin: "Admin" };
-const OFFER_LABEL: Record<string, string> = { uploaded: "Ready to submit", pending_approval: "Waiting for approval", approved: "Approved", rejected: "Rejected", superseded: "Replaced" };
+const OFFER_TONE: Record<string, string> = { uploaded: "blue", pending_approval: "amber", approved: "green", rejected: "red", superseded: "gray", sent: "green" };
+const ROLE_LABEL: Record<string, string> = { payroll: "Payroll" };
+const OFFER_LABEL: Record<string, string> = { uploaded: "Ready to submit", pending_approval: "Waiting for approval", approved: "Approved", rejected: "Rejected", superseded: "Replaced", sent: "Sent to candidate" };
 
 function OfferLetter({ data, reload }: any) {
   const { user } = useAuth();
@@ -912,9 +912,9 @@ function OfferLetter({ data, reload }: any) {
   const approvers: any[] = (data.offer_approvers || []).filter((a: any) => a.id !== user?.id);
   const current = letters.find((o) => o.status !== "superseded");
   const history = letters.filter((o) => o !== current);
-  const canEdit = !!user && ["onboarding", "ta_lead", "admin"].includes(user.role);
+  const canEdit = !!user && ["onboarding", "admin"].includes(user.role);
   const canOpen = !!user && (["onboarding", "ta_lead", "admin"].includes(user.role) || (user.role === "recruiter" && c.owner_id === user.id) || current?.approver_id === user.id);
-  const isApprover = !!user && !!current && current.status === "pending_approval" && (current.approver_id === user.id || user.role === "admin");
+  const isApprover = !!user && !!current && current.status === "pending_approval" && current.approver_id === user.id;
 
   const [file, setFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0); // remount the file input to clear it after upload
@@ -923,6 +923,7 @@ function OfferLetter({ data, reload }: any) {
   const [busy, setBusy] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const [message, setMessage] = useState("");
 
   async function run(fn: () => Promise<any>, ok: string) {
     setBusy(true);
@@ -943,7 +944,7 @@ function OfferLetter({ data, reload }: any) {
     const form = new FormData();
     form.append("file", file);
     form.append("notes", notes);
-    if (await run(() => api(`/api/candidates/${c.id}/offer-letters`, { method: "POST", form }), "Offer letter uploaded — now submit it for approval")) {
+    if (await run(() => api(`/api/candidates/${c.id}/offer-letters`, { method: "POST", form }), "Offer letter uploaded — now send it to Payroll for approval")) {
       setFile(null);
       setFileKey((k: number) => k + 1);
       setNotes("");
@@ -958,7 +959,11 @@ function OfferLetter({ data, reload }: any) {
       toast("error", errMsg(e));
     }
   }
-  const submit = () => run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/submit`, { approver_id: Number(approverId) }), "Sent for approval — the approver has been emailed");
+  const submit = () => run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/submit`, { approver_id: Number(approverId) }), "Sent to Payroll for approval — the approver has been emailed");
+  const send = () =>
+    run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/send`, { message }), `Offer letter emailed to ${c.email}`).then((ok) => {
+      if (ok) setMessage("");
+    });
   const decide = (approve: boolean) =>
     run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/decision`, { approve, note: approve ? "" : reason }), approve ? "Offer letter approved" : "Offer letter rejected").then((ok) => {
       if (ok) {
@@ -967,17 +972,17 @@ function OfferLetter({ data, reload }: any) {
       }
     });
 
-  const step = !current ? 1 : current.status === "uploaded" ? 2 : current.status === "pending_approval" ? 3 : current.status === "approved" ? 4 : 1;
-  const steps = ["Upload offer letter", "Submit for approval", "Approver confirms", "Approved"];
+  const step = !current ? 1 : current.status === "uploaded" ? 2 : current.status === "pending_approval" ? 3 : current.status === "approved" ? 4 : current.status === "sent" ? 5 : 1;
+  const steps = ["Upload offer letter", "Send to Payroll", "Payroll approves", "Send to candidate"];
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-4">
-        <Card title="Offer letter" subtitle="Onboarding uploads the finished offer letter, then sends it to a TA lead or admin, who confirms their approval by email.">
+        <Card title="Offer letter" subtitle="Onboarding uploads the finished offer letter once and sends it to Payroll for approval, then emails the approved letter to the candidate.">
           <ol className="flex flex-wrap gap-x-6 gap-y-2 text-xs mb-4">
             {steps.map((label, i) => (
-              <li key={label} className={cx("flex items-center gap-1.5", i + 1 < step || step === 4 ? "text-emerald-700 dark:text-emerald-300" : i + 1 === step ? "font-semibold text-brand-800 dark:text-brand-200" : "text-slate-400")}>
-                {i + 1 < step || step === 4 ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+              <li key={label} className={cx("flex items-center gap-1.5", i + 1 < step ? "text-emerald-700 dark:text-emerald-300" : i + 1 === step ? "font-semibold text-brand-800 dark:text-brand-200" : "text-slate-400")}>
+                {i + 1 < step ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
                 {label}
               </li>
             ))}
@@ -993,6 +998,7 @@ function OfferLetter({ data, reload }: any) {
                     Uploaded {fmtDateTime(current.uploaded_at)} by {current.uploaded_by_name || "—"}
                     {current.submitted_at && ` · sent to ${current.approver_name} ${relTime(current.submitted_at)}`}
                     {current.decided_at && ` · ${OFFER_LABEL[current.status].toLowerCase()} ${relTime(current.decided_at)}${current.decided_via === "email" ? " via email" : ""}`}
+                    {current.sent_at && ` · emailed to ${current.sent_to} by ${current.sent_by_name || "—"} ${relTime(current.sent_at)}`}
                   </div>
                 </div>
                 <Badge tone={OFFER_TONE[current.status]}>{OFFER_LABEL[current.status]}</Badge>
@@ -1015,9 +1021,9 @@ function OfferLetter({ data, reload }: any) {
           {canEdit && current?.status === "uploaded" && (
             <div className="flex flex-wrap items-end gap-2 mb-4">
               <div className="flex-1 min-w-[14rem]">
-                <Field label="Approver">
+                <Field label="Payroll approver">
                   <select className="input" value={approverId} onChange={(e) => setApproverId(e.target.value)}>
-                    <option value="">Choose a TA lead or admin…</option>
+                    <option value="">Choose a Payroll team member…</option>
                     {approvers.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name} ({ROLE_LABEL[a.role] || humanize(a.role)})
@@ -1060,15 +1066,36 @@ function OfferLetter({ data, reload }: any) {
             </div>
           )}
 
-          {canEdit && current?.status !== "approved" && (
+          {canEdit && current?.status === "approved" && (
+            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 p-3 mb-4 space-y-2">
+              <div className="text-sm font-medium">Approved — ready to send to the candidate</div>
+              {c.email_opt_out ? (
+                <div className="text-xs text-red-700 dark:text-red-300">{c.full_name} has unsubscribed from emails. Share the offer letter another way.</div>
+              ) : !c.email ? (
+                <div className="text-xs text-red-700 dark:text-red-300">Add the candidate's email address to send the offer letter.</div>
+              ) : (
+                <>
+                  <div className="text-xs text-slate-600 dark:text-slate-300">
+                    The PDF will be emailed to <b>{c.email}</b> as an attachment.
+                  </div>
+                  <textarea className="input" rows={2} placeholder="Add a personal note to the email (optional)" value={message} onChange={(e) => setMessage(e.target.value)} />
+                  <Button variant="primary" icon={<Send className="h-4 w-4" />} loading={busy} onClick={send}>
+                    Send offer letter to candidate
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
+          {canEdit && (!current || current.status === "rejected") && (
             <div className="space-y-2">
-              <div className="text-sm font-medium">{current ? "Upload a new version" : "Upload the offer letter"}</div>
+              <div className="text-sm font-medium">{current ? "Upload a corrected offer letter" : "Upload the offer letter"}</div>
               <input key={fileKey} type="file" accept="application/pdf,.pdf" className="block text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-solid file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-50 dark:file:border-white/15 dark:file:bg-white/5 dark:file:text-slate-200" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-              <textarea className="input" rows={2} placeholder="Notes for the approver (optional): rate, start date, client…" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <textarea className="input" rows={2} placeholder="Notes for Payroll (optional): rate, start date, client…" value={notes} onChange={(e) => setNotes(e.target.value)} />
               <Button icon={<Upload className="h-4 w-4" />} disabled={!file} loading={busy} onClick={upload}>
                 Upload PDF
               </Button>
-              {current?.status === "pending_approval" && <div className="text-[11px] text-slate-500">Uploading a new version cancels the pending approval request.</div>}
+              {!current && <div className="text-[11px] text-slate-500">The offer letter is uploaded once. A new version can only be uploaded if Payroll rejects it.</div>}
             </div>
           )}
           {!canEdit && !current && <div className="text-sm text-slate-500">No offer letter yet. Onboarding uploads it here.</div>}

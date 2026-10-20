@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .db import get_db
-from .models import Candidate, Ticket, User
+from .models import Candidate, OfferLetter, Ticket, User
 from .util import unsign
 
 STAFF_ALL_CANDIDATES = {"recruiter", "ta_lead", "coordinator", "admin"}
@@ -70,6 +70,9 @@ def can_view_candidate(db: Session, user: User, c: Candidate) -> bool:
         return True
     team = {"payroll": "payroll", "immigration": "immigration", "onboarding": "onboarding", "marketing": "marketing"}.get(user.role)
     if team and db.query(Ticket).filter_by(candidate_id=c.id, team=team).first():
+        return True
+    # The Payroll approver of an offer letter needs the candidate to review it in the app.
+    if db.query(OfferLetter).filter_by(candidate_id=c.id, approver_id=user.id).first():
         return True
     return False
 
