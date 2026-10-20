@@ -191,7 +191,7 @@ export default function Candidate360() {
             { key: "qualification", label: "Qualification" },
             { key: "process", label: "Process & consent" },
             { key: "documents", label: "Documents", count: data.documents.items.length || undefined },
-            { key: "offer", label: "Offer letter", count: data.offer_letters?.filter((o: any) => o.status === "pending_approval").length || undefined },
+            ...(user && OFFER_ROLES.includes(user.role) ? [{ key: "offer", label: "Offer letter", count: data.offer_letters?.filter((o: any) => o.status === "pending_approval").length || undefined }] : []),
             { key: "outreach", label: "Outreach", count: data.drafts.filter((d: any) => ["pending_approval", "blocked", "manual_send"].includes(d.status)).length || undefined },
             { key: "timeline", label: "Timeline", count: data.timeline.length },
             { key: "tickets", label: "Tickets", count: data.tickets.length || undefined },
@@ -204,7 +204,7 @@ export default function Candidate360() {
         {tab === "qualification" && <Qualification data={data} meta={meta} staff={staff} reload={reload} />}
         {tab === "process" && <ProcessConsent data={data} meta={meta} staff={staff} reload={reload} />}
         {tab === "documents" && <Documents data={data} reload={reload} />}
-        {tab === "offer" && <OfferLetter data={data} reload={reload} />}
+        {tab === "offer" && user && OFFER_ROLES.includes(user.role) && <OfferLetter data={data} reload={reload} />}
         {tab === "outreach" && <Outreach data={data} reload={reload} />}
         {tab === "timeline" && <Timeline items={data.timeline} />}
         {tab === "tickets" && <Tickets items={data.tickets} />}
@@ -900,11 +900,100 @@ function ProcessConsent({ data, meta, staff, reload }: any) {
 }
 
 // ---------------------------------------------------------------------------
-const OFFER_TONE: Record<string, string> = { uploaded: "blue", pending_approval: "amber", approved: "green", rejected: "red", superseded: "gray", sent: "green" };
+// Onboarding and TA leads (and admins) get the full tab; Payroll only records its decision and never sees the PDF.
+const OFFER_ROLES = ["onboarding", "ta_lead", "payroll", "admin"];
+const OFFER_TONE: Record<string, string> = { uploaded: "blue", pending_approval: "amber", on_hold: "amber", approved: "green", rejected: "red", superseded: "gray", sent: "green" };
 const ROLE_LABEL: Record<string, string> = { payroll: "Payroll" };
-const OFFER_LABEL: Record<string, string> = { uploaded: "Ready to submit", pending_approval: "Waiting for approval", approved: "Approved", rejected: "Rejected", superseded: "Replaced", sent: "Sent to candidate" };
+const OFFER_LABEL: Record<string, string> = { uploaded: "Ready to submit", pending_approval: "Waiting for approval", on_hold: "On hold", approved: "Approved", rejected: "Rejected", superseded: "Replaced", sent: "Sent to candidate" };
 
 function OfferLetter({ data, reload }: any) {
+  const { user } = useAuth();
+  if (user?.role === "payroll") return <PayrollOfferDecision data={data} reload={reload} />;
+  return <OfferLetterFull data={data} reload={reload} />;
+}
+
+function PayrollOfferDecision({ data, reload }: any) {
+  const { user } = useAuth();
+  const toast = useToast();
+  const c = data.candidate;
+  const o = (data.offer_letters || []).find((x: any) => x.approver_id === user?.id && x.status !== "superseded");
+  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"" | "reject" | "hold">("");
+  const [reason, setReason] = useState("");
+  const open = !!o && ["pending_approval", "on_hold"].includes(o.status);
+
+  async function decide(decision: "approve" | "reject" | "hold") {
+    setBusy(true);
+    try {
+      await post(`/api/candidates/${c.id}/offer-letters/${o.id}/decision`, { decision, note: decision === "approve" ? "" : reason });
+      toast("success", decision === "approve" ? "Offer letter approved" : decision === "hold" ? "Offer letter put on hold" : "Offer letter rejected");
+      setMode("");
+      setReason("");
+      reload();
+    } catch (e) {
+      toast("error", errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Offer letter approval" subtitle="Onboarding has prepared an offer letter for this candidate. Approve it, reject it, or put it on hold.">
+      {!o ? (
+        <div className="text-sm text-slate-500">No offer letter is waiting for your decision.</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex-1 min-w-[12rem] text-sm">
+              <div className="font-medium">{c.full_name}</div>
+              <div className="text-[11px] text-slate-500">
+                Sent by {o.submitted_by_name || "—"} {o.submitted_at && relTime(o.submitted_at)}
+                {o.decided_at && ` · ${OFFER_LABEL[o.status].toLowerCase()} ${relTime(o.decided_at)}`}
+              </div>
+            </div>
+            <Badge tone={OFFER_TONE[o.status]}>{OFFER_LABEL[o.status]}</Badge>
+          </div>
+          {o.notes && <div className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap">Notes from Onboarding: {o.notes}</div>}
+          {o.decision_note && <div className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap">Your note: {o.decision_note}</div>}
+          {open && (
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 p-3">
+              <div className="text-sm font-medium mb-2">{o.status === "on_hold" ? "This offer letter is on hold — approve or reject it when ready" : "Your approval is needed"}</div>
+              {!mode ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="success" icon={<Check className="h-4 w-4" />} loading={busy} onClick={() => decide("approve")}>
+                    Approve
+                  </Button>
+                  {o.status !== "on_hold" && (
+                    <Button variant="ghost" onClick={() => setMode("hold")}>
+                      Hold…
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={() => setMode("reject")}>
+                    Reject…
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <textarea className="input" rows={2} placeholder={mode === "hold" ? "Why is it on hold? What are you waiting for?" : "What needs to change?"} value={reason} onChange={(e) => setReason(e.target.value)} />
+                  <div className="flex gap-2">
+                    <Button variant={mode === "reject" ? "danger" : "primary"} disabled={!reason.trim()} loading={busy} onClick={() => decide(mode)}>
+                      {mode === "hold" ? "Put on hold" : "Reject offer letter"}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setMode("")}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function OfferLetterFull({ data, reload }: any) {
   const { user } = useAuth();
   const toast = useToast();
   const c = data.candidate;
@@ -913,16 +1002,13 @@ function OfferLetter({ data, reload }: any) {
   const current = letters.find((o) => o.status !== "superseded");
   const history = letters.filter((o) => o !== current);
   const canEdit = !!user && ["onboarding", "admin"].includes(user.role);
-  const canOpen = !!user && (["onboarding", "ta_lead", "admin"].includes(user.role) || (user.role === "recruiter" && c.owner_id === user.id) || current?.approver_id === user.id);
-  const isApprover = !!user && !!current && current.status === "pending_approval" && current.approver_id === user.id;
+  const canOpen = !!user && ["onboarding", "ta_lead", "admin"].includes(user.role);
 
   const [file, setFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0); // remount the file input to clear it after upload
   const [notes, setNotes] = useState("");
   const [approverId, setApproverId] = useState<string>("");
   const [busy, setBusy] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
-  const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
 
   async function run(fn: () => Promise<any>, ok: string) {
@@ -964,15 +1050,8 @@ function OfferLetter({ data, reload }: any) {
     run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/send`, { message }), `Offer letter emailed to ${c.email}`).then((ok) => {
       if (ok) setMessage("");
     });
-  const decide = (approve: boolean) =>
-    run(() => post(`/api/candidates/${c.id}/offer-letters/${current.id}/decision`, { approve, note: approve ? "" : reason }), approve ? "Offer letter approved" : "Offer letter rejected").then((ok) => {
-      if (ok) {
-        setRejecting(false);
-        setReason("");
-      }
-    });
 
-  const step = !current ? 1 : current.status === "uploaded" ? 2 : current.status === "pending_approval" ? 3 : current.status === "approved" ? 4 : current.status === "sent" ? 5 : 1;
+  const step = !current ? 1 : current.status === "uploaded" ? 2 : ["pending_approval", "on_hold"].includes(current.status) ? 3 : current.status === "approved" ? 4 : current.status === "sent" ? 5 : 1;
   const steps = ["Upload offer letter", "Send to Payroll", "Payroll approves", "Send to candidate"];
 
   return (
@@ -1010,8 +1089,8 @@ function OfferLetter({ data, reload }: any) {
               </div>
               {current.notes && <div className="text-xs text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">Notes: {current.notes}</div>}
               {current.decision_note && (
-                <div className={cx("text-xs mt-2 whitespace-pre-wrap", current.status === "rejected" ? "text-red-700 dark:text-red-300" : "text-slate-600 dark:text-slate-300")}>
-                  {current.status === "rejected" ? "Reason: " : "Approver note: "}
+                <div className={cx("text-xs mt-2 whitespace-pre-wrap", current.status === "rejected" ? "text-red-700 dark:text-red-300" : current.status === "on_hold" ? "text-amber-700 dark:text-amber-300" : "text-slate-600 dark:text-slate-300")}>
+                  {current.status === "rejected" ? "Reason: " : current.status === "on_hold" ? "On hold: " : "Payroll note: "}
                   {current.decision_note}
                 </div>
               )}
@@ -1035,34 +1114,6 @@ function OfferLetter({ data, reload }: any) {
               <Button variant="primary" icon={<Send className="h-4 w-4" />} disabled={!approverId} loading={busy} onClick={submit}>
                 Send for approval
               </Button>
-            </div>
-          )}
-
-          {isApprover && (
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 p-3 mb-4">
-              <div className="text-sm font-medium mb-2">Your approval is needed</div>
-              {!rejecting ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="success" icon={<Check className="h-4 w-4" />} loading={busy} onClick={() => decide(true)}>
-                    Confirm & approve
-                  </Button>
-                  <Button variant="ghost" onClick={() => setRejecting(true)}>
-                    Reject…
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <textarea className="input" rows={2} placeholder="What needs to change?" value={reason} onChange={(e) => setReason(e.target.value)} />
-                  <div className="flex gap-2">
-                    <Button variant="danger" disabled={!reason.trim()} loading={busy} onClick={() => decide(false)}>
-                      Reject offer letter
-                    </Button>
-                    <Button variant="ghost" onClick={() => setRejecting(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

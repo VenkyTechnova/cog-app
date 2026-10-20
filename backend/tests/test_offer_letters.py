@@ -54,8 +54,9 @@ def test_submit_emails_approver_and_approve_from_email_link(client, auth, db, us
     token = _token_from_email(db, approver)
     page = client.get(f"/api/public/offer-approval/{token}")
     assert page.status_code == 200 and "confirm my approval" in page.text
-    f = client.get(f"/api/public/offer-approval/{token}/file")
-    assert f.status_code == 200 and f.content.startswith(b"%PDF")
+    # Payroll decides from Onboarding's notes; the PDF isn't linked or served.
+    assert "Rate $70/hr" in page.text and "offer.pdf" not in page.text
+    assert not client.get(f"/api/public/offer-approval/{token}/file").content.startswith(b"%PDF")
 
     # Approving without ticking the confirmation box is refused.
     r = client.post(f"/api/public/offer-approval/{token}", data={"decision": "approve"})
@@ -82,13 +83,13 @@ def test_reject_in_app_requires_reason_and_only_assigned_approver(client, auth, 
 
     # Only the assigned Payroll approver decides: not Onboarding, a TA lead or an admin.
     for role in ("onboarding", "ta_lead", "admin"):
-        assert client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"approve": True}, headers=auth(role)).status_code == 403
+        assert client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"decision": "approve"}, headers=auth(role)).status_code == 403
     payroll = auth("payroll")
     # The approver can open the candidate even without a Payroll ticket.
     assert client.get(f"/api/candidates/{c.id}", headers=payroll).status_code == 200
-    r = client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"approve": False}, headers=payroll)
+    r = client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"decision": "reject"}, headers=payroll)
     assert r.status_code == 422
-    r = client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"approve": False, "note": "Wrong start date"}, headers=payroll)
+    r = client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"decision": "reject", "note": "Wrong start date"}, headers=payroll)
     assert r.status_code == 200 and r.json()["status"] == "rejected"
 
     # After a rejection a corrected version can be uploaded and submitted again.
@@ -105,7 +106,7 @@ def test_offer_letter_is_uploaded_only_once(client, auth, db, users, make_candid
     assert r.status_code == 422 and "already been uploaded" in r.json()["detail"]
     client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/submit", json={"approver_id": users["payroll"].id}, headers=h)
     assert _upload(client, h, c.id).status_code == 422
-    client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"approve": True}, headers=auth("payroll"))
+    client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"decision": "approve"}, headers=auth("payroll"))
     assert _upload(client, h, c.id).status_code == 422
     db.expire_all()
     assert db.query(OfferLetter).filter_by(candidate_id=c.id).count() == 1
@@ -133,7 +134,7 @@ def _approved(client, auth, db, users, make_candidate, **kw):
     h = auth("onboarding")
     oid = _upload(client, h, c.id).json()["id"]
     client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/submit", json={"approver_id": users["payroll"].id}, headers=h)
-    r = client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"approve": True}, headers=auth("payroll"))
+    r = client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"decision": "approve"}, headers=auth("payroll"))
     assert r.status_code == 200, r.text
     return c, oid
 
@@ -146,7 +147,7 @@ def test_send_approved_offer_letter_to_candidate_with_pdf_attached(client, auth,
     r = client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/send", json={}, headers=h)
     assert r.status_code == 422 and "approved" in r.json()["detail"]
     client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/submit", json={"approver_id": users["payroll"].id}, headers=h)
-    client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"approve": True}, headers=auth("payroll"))
+    client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/decision", json={"decision": "approve"}, headers=auth("payroll"))
 
     # Only Onboarding sends it to the candidate.
     for role in ("recruiter", "ta_lead", "payroll"):
@@ -198,3 +199,51 @@ def test_sent_email_carries_the_approved_pdf_bytes(client, auth, db, users, make
     att = list(msg.iter_attachments())
     assert [(a.get_filename(), a.get_content_type()) for a in att] == [("offer.pdf", "application/pdf")]
     assert att[0].get_content() == PDF
+
+
+def test_payroll_can_hold_then_approve_but_never_opens_the_pdf(client, auth, db, users, make_candidate):
+    c = _onboarding_candidate(db, make_candidate)
+    h = auth("onboarding")
+    oid = _upload(client, h, c.id).json()["id"]
+    client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/submit", json={"approver_id": users["payroll"].id}, headers=h)
+    payroll = auth("payroll")
+    url = f"/api/candidates/{c.id}/offer-letters/{oid}"
+
+    assert client.get(f"{url}/download", headers=payroll).status_code == 403
+    for role in ("onboarding", "ta_lead", "admin"):
+        assert client.get(f"{url}/download", headers=auth(role)).status_code == 200
+
+    # Hold needs a reason, tells Onboarding, and blocks a new upload.
+    assert client.post(f"{url}/decision", json={"decision": "hold"}, headers=payroll).status_code == 422
+    r = client.post(f"{url}/decision", json={"decision": "hold", "note": "Waiting on rate sign-off"}, headers=payroll)
+    assert r.status_code == 200 and r.json()["status"] == "on_hold"
+    assert db.query(OutboundEmail).filter_by(to_email=users["onboarding"].email).filter(OutboundEmail.subject.like("Offer letter put on hold%")).count() == 1
+    assert _upload(client, h, c.id).status_code == 422
+    assert client.post(f"{url}/decision", json={"decision": "hold", "note": "again"}, headers=payroll).status_code == 422
+    # Not sendable while on hold.
+    assert client.post(f"{url}/send", json={}, headers=h).status_code == 422
+
+    r = client.post(f"{url}/decision", json={"decision": "approve"}, headers=payroll)
+    assert r.status_code == 200 and r.json()["status"] == "approved"
+
+
+def test_hold_from_email_link(client, auth, db, users, make_candidate):
+    c = _onboarding_candidate(db, make_candidate)
+    h = auth("onboarding")
+    oid = _upload(client, h, c.id).json()["id"]
+    client.post(f"/api/candidates/{c.id}/offer-letters/{oid}/submit", json={"approver_id": users["payroll"].id}, headers=h)
+    token = _token_from_email(db, users["payroll"])
+    assert "Hold" in client.get(f"/api/public/offer-approval/{token}").text
+
+    r = client.post(f"/api/public/offer-approval/{token}", data={"decision": "hold"})
+    assert "reason" in r.text
+    r = client.post(f"/api/public/offer-approval/{token}", data={"decision": "hold", "note": "Need start date confirmed"})
+    assert "on hold" in r.text
+    db.expire_all()
+    assert db.get(OfferLetter, oid).status == "on_hold"
+
+    # The same link still works to decide later; Hold isn't offered again.
+    page = client.get(f"/api/public/offer-approval/{token}").text
+    assert "Need start date confirmed" in page and "value=hold" not in page
+    r = client.post(f"/api/public/offer-approval/{token}", data={"decision": "reject", "note": "Start date moved"})
+    assert "rejected" in r.text

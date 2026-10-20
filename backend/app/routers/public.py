@@ -150,44 +150,35 @@ def _offer_or_page(db: Session, token: str):
 
 @router.get("/public/offer-approval/{token}")
 def offer_approval_page(token: str, db: Session = Depends(get_db)):
+    # Payroll decides from the details Onboarding provides; the PDF is not shown here.
     o, err = _offer_or_page(db, token)
     if err:
         return err
     esc = html_lib.escape
     c = o.candidate
     submitter = db.get(User, o.submitted_by) if o.submitted_by else None
-    file_url = f"{get_settings().api_url}/api/public/offer-approval/{token}/file"
     info = (
-        f"<p><b>Candidate:</b> {esc(c.full_name)}<br><b>Submitted by:</b> {esc(submitter.name if submitter else '-')}"
-        f"<br><b>File:</b> <a href='{file_url}' target='_blank'>{esc(o.filename)}</a></p>"
-        + (f"<p><b>Notes:</b><br>{esc(o.notes).replace(chr(10), '<br>')}</p>" if o.notes else "")
+        f"<p><b>Candidate:</b> {esc(c.full_name)}<br><b>Submitted by:</b> {esc(submitter.name if submitter else '-')}</p>"
+        + (f"<p><b>Notes from Onboarding:</b><br>{esc(o.notes).replace(chr(10), '<br>')}</p>" if o.notes else "")
     )
-    if o.status != "pending_approval":
+    if o.status not in ("pending_approval", "on_hold"):
         when = to_local(aware(o.decided_at)).strftime("%b %d, %Y %I:%M %p") if o.decided_at else ""
         return _page("Offer letter " + o.status.replace("_", " "), info + f"<p>This offer letter has already been <b>{esc(o.status.replace('_', ' '))}</b> {esc(when)}.</p>")
+    if o.status == "on_hold":
+        info += f"<p style='background:#fef3c7;padding:8px 12px;border-radius:8px'>You put this offer letter on hold: {esc(o.decision_note)}</p>"
+    btn = "border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer"
     form = (
         "<form method=post style='margin-top:16px'>"
         "<label style='display:flex;gap:8px;align-items:flex-start;font-size:14px'><input type=checkbox name=confirm value=1 required style='margin-top:3px'>"
-        "<span>I have reviewed this offer letter and confirm my approval for it to be issued to the candidate.</span></label>"
-        "<textarea name=note rows=3 placeholder='Note (required if you reject)' style='width:100%;margin-top:12px;box-sizing:border-box;padding:8px;border:1px solid #d1d5db;border-radius:8px'></textarea>"
+        "<span>I confirm my approval for this offer letter to be issued to the candidate.</span></label>"
+        "<textarea name=note rows=3 placeholder='Note (required to reject or hold)' style='width:100%;margin-top:12px;box-sizing:border-box;padding:8px;border:1px solid #d1d5db;border-radius:8px'></textarea>"
         "<div style='display:flex;gap:8px;margin-top:12px'>"
-        "<button name=decision value=approve style='background:#0f3d5e;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer'>Approve</button>"
-        "<button name=decision value=reject formnovalidate style='background:#fff;color:#b91c1c;border:1px solid #b91c1c;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer'>Reject</button>"
+        f"<button name=decision value=approve style='background:#0f3d5e;color:#fff;border:0;{btn}'>Approve</button>"
+        + ("" if o.status == "on_hold" else f"<button name=decision value=hold formnovalidate style='background:#fff;color:#b45309;border:1px solid #b45309;{btn}'>Hold</button>")
+        + f"<button name=decision value=reject formnovalidate style='background:#fff;color:#b91c1c;border:1px solid #b91c1c;{btn}'>Reject</button>"
         "</div></form>"
     )
-    return _page("Offer letter approval", info + "<p>Please open the PDF and review it before deciding.</p>" + form)
-
-
-@router.get("/public/offer-approval/{token}/file")
-def offer_approval_file(token: str, request: Request, db: Session = Depends(get_db)):
-    o, err = _offer_or_page(db, token)
-    if err:
-        return err
-    from ..storage import get_storage
-
-    audit(db, "offer.downloaded", "candidate", o.candidate_id, o.approver_id, {"offer_id": o.id, "via": "email_link"}, client_ip(request))
-    db.commit()
-    return Response(get_storage().get(o.storage_key), media_type=o.content_type, headers={"Content-Disposition": f'inline; filename="{o.filename}"'})
+    return _page("Offer letter approval", info + form)
 
 
 @router.post("/public/offer-approval/{token}")
@@ -197,16 +188,17 @@ def offer_approval_submit(token: str, decision: str = Form(...), note: str = For
     o, err = _offer_or_page(db, token)
     if err:
         return err
-    approve = decision == "approve"
-    if approve and not confirm:
+    if decision == "approve" and not confirm:
         return _page("Please confirm", "<p>Tick the confirmation box to approve. <a href=''>Go back</a></p>")
     try:
-        offers.decide(db, o, approve, note, None, via="email")
+        offers.decide(db, o, decision, note, None, via="email")
     except offers.OfferError as e:
         return _page("Not recorded", f"<p>{html_lib.escape(str(e))}. <a href=''>Go back</a></p>")
     db.commit()
-    if approve:
+    if decision == "approve":
         return _page("Offer letter approved", f"<p>Thanks. The offer letter for {html_lib.escape(o.candidate.full_name)} is approved, and Onboarding has been notified.</p>")
+    if decision == "hold":
+        return _page("Offer letter on hold", "<p>Onboarding has been notified with your note. You can approve or reject it later from this link or in the app.</p>")
     return _page("Offer letter rejected", "<p>Onboarding has been notified with your note so they can upload a corrected version.</p>")
 
 

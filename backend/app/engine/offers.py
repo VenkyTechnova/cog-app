@@ -1,7 +1,9 @@
 """Offer letters: Onboarding uploads a finished PDF once and submits it to Payroll for approval.
 
 The approver (a Payroll team member) gets an email with a signed link to a review page where they can
-open the PDF and approve or reject it. They can also decide from the candidate's Offer letter tab.
+approve, reject or put the letter on hold. They can also decide from the candidate's Offer letter tab.
+Payroll decides from the details Onboarding provides; the PDF itself is only shown to Onboarding,
+TA leads and admins.
 Once approved, Onboarding emails the letter to the candidate with the PDF attached. The letter is
 uploaded one time; a new version can only be uploaded after Payroll rejects it.
 """
@@ -38,7 +40,7 @@ def upload(db: Session, c: Candidate, user: User, filename: str, content_type: s
     if len(data) < 200:
         raise OfferError("File looks empty or unreadable")
     # One-time upload: a corrected version is only accepted after Payroll rejects the letter.
-    active = db.query(OfferLetter).filter(OfferLetter.candidate_id == c.id, OfferLetter.status.in_(["uploaded", "pending_approval", "approved", "sent"])).first()
+    active = db.query(OfferLetter).filter(OfferLetter.candidate_id == c.id, OfferLetter.status.in_(["uploaded", "pending_approval", "on_hold", "approved", "sent"])).first()
     if active is not None:
         raise OfferError(f"An offer letter has already been uploaded ({active.status.replace('_', ' ')}); a new one can only be uploaded if Payroll rejects it")
     folder = ensure_folder(db, c)
@@ -112,7 +114,7 @@ def _email_approver(db: Session, o: OfferLetter, c: Candidate, submitter: User, 
         f"Hi {approver.name.split(' ')[0]},\n\n"
         f"{submitter.name} has prepared an offer letter for {c.full_name} and needs your approval before it is issued.\n"
         f"{notes}\n"
-        f"Review the offer letter and confirm your approval here:\n{review}\n\n"
+        f"Approve, reject or put it on hold here:\n{review}\n\n"
         f"Or open the candidate in the app:\n{in_app}\n\n"
         f"This link expires in {LINK_TTL_DAYS} days."
     )
@@ -121,19 +123,27 @@ def _email_approver(db: Session, o: OfferLetter, c: Candidate, submitter: User, 
         raise OfferError("The approval email could not be sent: " + (rec.error or "unknown error"))
 
 
-def decide(db: Session, o: OfferLetter, approve: bool, note: str, user: User | None, via: str) -> OfferLetter:
-    if o.status != "pending_approval":
+DECISIONS = {"approve": ("approved", "approved"), "reject": ("rejected", "rejected"), "hold": ("on_hold", "put on hold")}
+
+
+def decide(db: Session, o: OfferLetter, decision: str, note: str, user: User | None, via: str) -> OfferLetter:
+    """Record Payroll's decision: approve, reject or hold. A letter on hold can later be approved or rejected."""
+    if decision not in DECISIONS:
+        raise OfferError("Choose approve, reject or hold")
+    if o.status not in ("pending_approval", "on_hold"):
         raise OfferError(f"This offer letter is already {o.status.replace('_', ' ')}")
-    if not approve and not (note or "").strip():
-        raise OfferError("Please give a reason for rejecting the offer letter")
+    if decision == "hold" and o.status == "on_hold":
+        raise OfferError("This offer letter is already on hold")
+    if decision != "approve" and not (note or "").strip():
+        raise OfferError("Please give a reason for " + ("rejecting the offer letter" if decision == "reject" else "putting the offer letter on hold"))
+    approve = decision == "approve"
     approver = db.get(User, o.approver_id)
     actor = user or approver
-    o.status = "approved" if approve else "rejected"
+    o.status, verb = DECISIONS[decision]
     o.decided_at = now()
     o.decision_note = (note or "").strip()
     o.decided_via = via
     c = db.get(Candidate, o.candidate_id)
-    verb = "approved" if approve else "rejected"
     db.add(
         Interaction(
             candidate_id=c.id,
@@ -145,7 +155,7 @@ def decide(db: Session, o: OfferLetter, approve: bool, note: str, user: User | N
             occurred_at=now(),
         )
     )
-    audit(db, f"offer.{verb}", "candidate", c.id, actor.id if actor else None, {"offer_id": o.id, "via": via, "note": o.decision_note})
+    audit(db, f"offer.{o.status}", "candidate", c.id, actor.id if actor else None, {"offer_id": o.id, "via": via, "note": o.decision_note})
     if o.submitted_by:
         from .notify import notify
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -669,7 +670,7 @@ def submit_offer_letter(cid: int, oid: int, body: OfferSubmitIn, db: Session = D
 
 
 class OfferDecisionIn(BaseModel):
-    approve: bool
+    decision: Literal["approve", "reject", "hold"]
     note: str = ""
 
 
@@ -680,7 +681,7 @@ def decide_offer_letter(cid: int, oid: int, body: OfferDecisionIn, db: Session =
     if u.id != o.approver_id:
         raise HTTPException(403, "Only the assigned Payroll approver can approve or reject this offer letter")
     try:
-        offers.decide(db, o, body.approve, body.note, u, via="app")
+        offers.decide(db, o, body.decision, body.note, u, via="app")
     except offers.OfferError as e:
         raise HTTPException(422, str(e))
     db.commit()
@@ -706,11 +707,11 @@ def send_offer_letter(cid: int, oid: int, body: OfferSendIn, db: Session = Depen
 
 @router.get("/{cid}/offer-letters/{oid}/download")
 def download_offer_letter(cid: int, oid: int, request: Request, db: Session = Depends(get_db), u: User = Depends(current_user)):
-    c = get_candidate_for(db, u, cid)
+    get_candidate_for(db, u, cid)
     o = _offer(db, cid, oid)
-    allowed = u.role in ("onboarding", "ta_lead", "admin") or u.id == o.approver_id or (u.role == "recruiter" and c.owner_id == u.id)
-    if not allowed:
-        raise HTTPException(403, "Only Onboarding, TA leads, the approver or the owning recruiter can open offer letters")
+    # Payroll approves from the details Onboarding provides; the document itself stays with these roles.
+    if u.role not in ("onboarding", "ta_lead", "admin"):
+        raise HTTPException(403, "Only Onboarding, TA leads and admins can open offer letters")
     audit(db, "offer.downloaded", "candidate", cid, u.id, {"offer_id": oid}, client_ip(request))
     db.commit()
     return Response(get_storage().get(o.storage_key), media_type=o.content_type, headers={"Content-Disposition": f'inline; filename="{o.filename}"'})
